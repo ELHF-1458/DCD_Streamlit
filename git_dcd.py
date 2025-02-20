@@ -131,13 +131,23 @@ def fig_to_png_bytes(fig):
 # Config Streamlit
 # -----------------------------------------
 st.set_page_config(page_title="Dashboard Productivité - Centrale Danone", layout="wide")
+st.markdown(
+    """
+    <style>
+    .centered { display: block; margin-left: auto; margin-right: auto; }
+    .title { text-align: center; font-size: 50px; font-weight: bold; }
+    .subtitle { text-align: center; font-size: 20px; }
+    .prestataire { text-align: center; font-size: 30px; font-weight: bold; margin-top: 10px; }
+    </style>
+    """, unsafe_allow_html=True
+)
 
 # Affichage d'un logo si présent
 col1, col2, col3 = st.columns([1.5,2,1.5])
 with col2:
     if os.path.exists(LOGO_PATH):
         st.image(LOGO_PATH, use_column_width=False, width=650)
-st.title("Dashboard Productivité - Centrale Danone")
+st.markdown("<h1 class='title'>Dashboard Productivité - Centrale Danone</h1>", unsafe_allow_html=True)
 
 # -----------------------------------------
 # UPLOAD du fichier “original”
