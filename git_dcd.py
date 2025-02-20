@@ -124,7 +124,7 @@ def generate_graph(df):
 
 def fig_to_png_bytes(fig):
     """Convertit la figure en PNG et renvoie l'objet BytesIO."""
-    png_bytes = fig.to_image(format="png", width=1200, height=800, scale=2)
+    png_bytes = fig.to_image(format="png", width=1900, height=900, scale=2)
     return BytesIO(png_bytes)
 
 # -----------------------------------------
@@ -133,10 +133,10 @@ def fig_to_png_bytes(fig):
 st.set_page_config(page_title="Dashboard Productivité - Centrale Danone", layout="wide")
 
 # Affichage d'un logo si présent
-col1, col2, col3 = st.columns([1,2,1])
+col1, col2, col3 = st.columns([1.5,2,1.5])
 with col2:
     if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, use_column_width=False, width=350)
+        st.image(LOGO_PATH, use_column_width=False, width=650)
 st.title("Dashboard Productivité - Centrale Danone")
 
 # -----------------------------------------
