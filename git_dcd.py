@@ -8,7 +8,8 @@ import datetime
 from io import BytesIO
 import warnings
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
 
 # -----------------------------------------
