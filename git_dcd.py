@@ -6,6 +6,10 @@ import plotly.graph_objects as go
 import os
 import datetime
 from io import BytesIO
+import warnings
+
+warnings.filterwarnings("ignore")
+
 
 # -----------------------------------------
 # Paramètres et constants
