@@ -348,9 +348,9 @@ with st.form("ajout_data"):
 # Téléchargement et affichage si des données mises à jour existent
 # -----------------------------------------
 if "df_updated" in st.session_state:
-    st.subheader("Télécharger le CSV cumulé mis à jour")
+    st.subheader("Télécharger le Fichier cumulé mis à jour")
     csv_bytes = st.session_state.df_updated.to_csv(index=False, encoding="utf-8-sig").encode("utf-8")
-    st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
+    st.download_button("Télécharger Fichier", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
     
     # Affichage des graphiques cumulés pour "Valeur" et "Cout" à partir du DataFrame mis à jour
     st.subheader("Graphique de l'évolution de la Distance")
