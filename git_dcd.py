@@ -26,7 +26,8 @@ logging.debug("Début de l'exécution de l'application.")
 OUTPUT_CSV_PATH = r"C:\Users\lenovo\Downloads\Data_CD\donnees_unifiees_mis_a_jour.csv"
 LOGO_PATH = os.path.join(r"C:\Users\lenovo\Downloads\Data_CD", "Centrale-Danone-Logo.png")
 
-# Colonnes attendues : "Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"
+# Attendu dans le fichier d'entrée : 
+# "Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
 couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
@@ -35,7 +36,7 @@ couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
 # Fonctions utilitaires
 # -----------------------------------------
 def load_data_from_uploaded(file) -> pd.DataFrame:
-    """Lit le CSV uploadé (encodage utf-8-sig) et convertit 'Mois' et 'Annee' en int."""
+    """Lit le CSV uploadé avec l'encodage 'utf-8-sig' et convertit 'Mois' et 'Annee' en int."""
     try:
         df = pd.read_csv(file, encoding="utf-8-sig")
         if not df.empty:
@@ -48,7 +49,7 @@ def load_data_from_uploaded(file) -> pd.DataFrame:
         return pd.DataFrame(columns=["Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"])
 
 def save_data(df, csv_path):
-    """Sauvegarde le DataFrame dans un CSV (utf-8-sig)."""
+    """Sauvegarde le DataFrame dans un CSV (encodage 'utf-8-sig')."""
     try:
         df.to_csv(csv_path, index=False, encoding="utf-8-sig")
         logging.debug("Données sauvegardées dans %s", csv_path)
@@ -56,7 +57,7 @@ def save_data(df, csv_path):
         logging.error("Erreur lors de la sauvegarde des données : %s", e)
 
 def convert_valeur(x):
-    """Convertit une chaîne du type 'XX.XX%' en float (XX.XX)."""
+    """Convertit une chaîne de type 'XX.XX%' en float."""
     try:
         s = str(x)
         if "%" in s:
@@ -77,36 +78,40 @@ def convert_cout(x):
 
 def generate_line_chart(df, col_name):
     """
-    Génère un line chart pour la colonne spécifiée (col_name) en agrégeant par (Annee, Prestataire, Palier kilometrique).
-    Le graphique présente des courbes lissées (spline) avec des marqueurs et une épaisseur de ligne améliorée.
+    Génère un line chart de haute qualité pour la colonne spécifiée (col_name)
+    en utilisant la même structure que vos anciens histogrammes avec courbes de tendance.
+    Pour ce faire, on utilise px.histogram pour bénéficier du layout (facettes, axes, grilles),
+    on supprime ensuite les barres et on ajoute nos courbes lissées (spline).
     """
     try:
+        # Conversion de la colonne ciblée
         if col_name == "Valeur":
             df[col_name] = df[col_name].apply(convert_valeur)
         elif col_name == "Cout":
             df[col_name] = df[col_name].apply(convert_cout)
-        
+        # Définir le palier comme une catégorie ordonnée
         df["Palier kilometrique"] = pd.Categorical(
             df["Palier kilometrique"],
             categories=ordre_paliers,
             ordered=True
         )
+        # Agrégation des données : moyenne pour (Annee, Prestataire, Palier kilometrique)
         df_mean = df.groupby(["Annee", "Prestataire", "Palier kilometrique"], as_index=False)[col_name].mean()
         df_mean.rename(columns={col_name: "Moyenne"}, inplace=True)
-        
-        # Utilisation d'une ligne spline avec marqueurs, taille des marqueurs et largeur de ligne ajustées pour une meilleure qualité
-        fig = px.line(
+        # Création de la figure via px.histogram pour obtenir la structure (facettes, axes, etc.)
+        fig = px.histogram(
             df_mean,
             x="Palier kilometrique",
             y="Moyenne",
             color="Annee",
-            markers=True,
+            barmode="group",
             facet_col="Prestataire",
             category_orders={"Palier kilometrique": ordre_paliers},
-            line_shape="spline"
+            color_discrete_map=couleur_barres
         )
-        # Ajustement des styles
-        fig.update_traces(marker=dict(size=10), line=dict(width=3))
+        # Supprimer les barres pour ne garder que la structure de layout
+        fig.data = []
+        # Mise à jour du layout
         fig.update_layout(
             title=dict(
                 text=f"<b>Évolution et Dispersion du {col_name} par Palier et Prestataire par an</b>",
@@ -120,7 +125,8 @@ def generate_line_chart(df, col_name):
             legend=dict(font=dict(color="black")),
             template="plotly_white",
             paper_bgcolor="white",
-            plot_bgcolor="white"
+            plot_bgcolor="white",
+            bargap=0.15
         )
         for axis in fig.layout:
             if axis.startswith("xaxis"):
@@ -135,6 +141,36 @@ def generate_line_chart(df, col_name):
                 fig.layout[axis].gridwidth = 1
         fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].strip(),
                                                     font=dict(size=18, color="black")))
+        # Ajout des courbes de tendance lissées par (Annee, Prestataire)
+        mapping = {cat: i for i, cat in enumerate(ordre_paliers)}
+        prestataires = list(df_mean["Prestataire"].unique())
+        annees = sorted(df_mean["Annee"].unique())
+        # Remplacer éventuellement le dictionnaire de couleurs si besoin :
+        color_map = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
+        for i, prest in enumerate(prestataires):
+            xaxis_name = "x" if i == 0 else f"x{i+1}"
+            yaxis_name = "y" if i == 0 else f"y{i+1}"
+            for annee in annees:
+                df_sub = df_mean[(df_mean["Prestataire"] == prest) & (df_mean["Annee"] == annee)]
+                if df_sub.empty or df_sub.shape[0] < 2:
+                    continue
+                df_sub = df_sub.sort_values("Palier kilometrique")
+                trace_trend = go.Scatter(
+                    x=df_sub["Palier kilometrique"].tolist(),
+                    y=df_sub["Moyenne"].values,
+                    mode="lines",
+                    line=dict(
+                        color=color_map.get(annee, "#000000"),
+                        dash="dash",
+                        shape="spline",
+                        width=3
+                    ),
+                    name=f"Tendance {annee}",
+                    legendgroup=str(annee),
+                    showlegend=False
+                )
+                trace_trend.update(xaxis=xaxis_name, yaxis=yaxis_name)
+                fig.add_trace(trace_trend)
         return fig
     except Exception as e:
         logging.error("Erreur lors de la génération du graphique pour %s : %s", col_name, e)
@@ -142,7 +178,7 @@ def generate_line_chart(df, col_name):
         return None
 
 def fig_to_png_bytes(fig):
-    """Convertit la figure Plotly en PNG et retourne un BytesIO."""
+    """Convertit la figure Plotly en PNG et renvoie un objet BytesIO."""
     try:
         img_bytes = fig.to_image(format="png", width=1900, height=900, scale=2)
         return BytesIO(img_bytes)
@@ -209,7 +245,7 @@ with st.form("ajout_data"):
         st.markdown(f"### {prest}")
         sum_valeur = 0.0
         sum_cout = 0.0
-        prest_lignes = []
+        prest_lignes = []  # Stocke les lignes pour ce prestataire
         for palier in ordre_paliers:
             # Les champs sont pré-remplis avec "20.00"
             cout_input = st.text_input(
@@ -222,12 +258,9 @@ with st.form("ajout_data"):
                 value="20.00",
                 key=f"{prest}_{palier}_valeur"
             ).strip()
-            # Si les deux champs sont vides (ce qui ne devrait pas arriver car ils sont pré-remplis)
-            if cout_input == "" and valeur_input == "":
-                continue
-            # Vérifier que si un champ est rempli, l'autre l'est aussi
+            # Si l'un des champs est vide (ce qui ne devrait pas se produire car pré-remplis), erreur
             if (cout_input == "" and valeur_input != "") or (cout_input != "" and valeur_input == ""):
-                st.error(f"Erreur: Pour {prest} - {palier}, vous devez remplir à la fois 'Cout' et 'Valeur' ou laisser les deux vides.")
+                st.error(f"Erreur: Pour {prest} - {palier}, veuillez remplir à la fois 'Cout' et 'Valeur' ou laisser les deux vides.")
                 st.stop()
             try:
                 cout_num = float(cout_input)
@@ -245,7 +278,7 @@ with st.form("ajout_data"):
                 "Cout": f"{cout_num:.2f}",
                 "Valeur": f"{valeur_num:.2f}%"
             })
-        # Vérifier que la somme des valeurs est exactement 100.00 pour ce prestataire
+        # Validation que pour ce prestataire la somme est exactement 100.00 pour Cout et Valeur
         if prest_lignes:
             if abs(sum_valeur - 100.00) > 1e-2:
                 st.error(f"Erreur: La somme des 'Valeur' pour {prest} est {sum_valeur:.2f} et doit être exactement 100.00.")
@@ -285,31 +318,25 @@ csv_bytes = df_final.to_csv(index=False, encoding="utf-8-sig").encode("utf-8")
 st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
 
 # -----------------------------------------
-# Génération des graphiques (Line Charts)
+# Génération et affichage des graphiques (Line Charts)
 # -----------------------------------------
 if "data_updated" in st.session_state and st.session_state.data_updated:
-    # Graphique pour Valeur
     st.subheader("Graphique pour la Valeur")
     fig_val = generate_line_chart(st.session_state.df_cum.copy(), "Valeur")
     if fig_val is not None:
         st.plotly_chart(fig_val)
         png_val = fig_to_png_bytes(fig_val)
         if png_val:
-            st.download_button("Télécharger le graphique Valeur en PNG",
-                               data=png_val,
-                               file_name="graphique_valeur.png",
-                               mime="image/png")
-    # Graphique pour Cout
+            st.download_button("Télécharger le graphique Valeur en PNG", data=png_val,
+                               file_name="graphique_valeur.png", mime="image/png")
     st.subheader("Graphique pour le Cout")
     fig_cout = generate_line_chart(st.session_state.df_cum.copy(), "Cout")
     if fig_cout is not None:
         st.plotly_chart(fig_cout)
         png_cout = fig_to_png_bytes(fig_cout)
         if png_cout:
-            st.download_button("Télécharger le graphique Cout en PNG",
-                               data=png_cout,
-                               file_name="graphique_cout.png",
-                               mime="image/png")
+            st.download_button("Télécharger le graphique Cout en PNG", data=png_cout,
+                               file_name="graphique_cout.png", mime="image/png")
     st.session_state.data_updated = False
 
 logging.debug("Fin de l'exécution de l'application.")
