@@ -204,10 +204,7 @@ st.markdown(
 # Affichage du logo centré (en utilisant un chemin relatif)
 col1, col2, col3 = st.columns([1.5, 2, 1.5])
 with col2:
-    if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=650, output_format="PNG", caption="")  # Pas de use_container_width ici
-    else:
-        st.write("Logo non trouvé.")
+    st.image(LOGO_PATH, width=650, output_format="PNG", caption="")
 
 st.markdown("<h1 class='title'>Dashboard Productivité - Centrale Danone</h1>", unsafe_allow_html=True)
 
