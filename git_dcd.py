@@ -186,7 +186,7 @@ def generate_graph(df, col_name):
                         shape="spline",         # Ligne droite (pas de courbe spline)
                         width=3
                     ),
-                    name=f"Tendance {annee}",
+                    name=f"{annee}",
                     legendgroup=str(annee),
                     showlegend=showlegend
                 )
