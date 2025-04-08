@@ -27,7 +27,7 @@ LOGO_PATH = "Centrale-Danone-Logo.png"  # Logo (doit être dans le même répert
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 # Note : On s'assure ici d'avoir la bonne orthographe sans espaces superflus.
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
-couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
+couleur_barres = {2023: "#0f1e5f", 2024: "#901c0f", 2025: "#275c20"}
 
 # -----------------------------------------
 # Fonctions utilitaires
@@ -345,7 +345,7 @@ if "df_updated" in st.session_state:
     st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
     
     # Affichage des graphiques cumulés pour "Valeur" et "Cout" à partir du DataFrame mis à jour
-    st.subheader("Graphique pour la Valeur")
+    st.subheader("Graphique de l'évolution de la Distance")
     fig_val = generate_graph(st.session_state.df_updated.copy(), "Valeur")
     if fig_val is not None:
         st.plotly_chart(fig_val, use_container_width=True)
@@ -354,7 +354,7 @@ if "df_updated" in st.session_state:
             st.download_button("Télécharger le graphique Valeur en PNG",
                                data=png_val, file_name="graphique_valeur.png", mime="image/png")
     
-    st.subheader("Graphique pour le Cout")
+    st.subheader("Graphique de l'évolution du Coût")
     fig_cout = generate_graph(st.session_state.df_updated.copy(), "Cout")
     if fig_cout is not None:
         st.plotly_chart(fig_cout, use_container_width=True)
