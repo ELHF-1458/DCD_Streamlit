@@ -23,7 +23,7 @@ logging.debug("Début de l'exécution de l'application.")
 # Paramètres et constantes
 # -----------------------------------------
 OUTPUT_CSV_PATH = "donnees_unifiees_mis_a_jour.csv"  # Fichier de sortie
-LOGO_PATH = "Centrale-Danone-Logo.png"  # Logo dans le même dossier que le script
+LOGO_PATH = "Centrale-Danone-Logo.png"  # Logo (doit être dans le même répertoire)
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
 couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
@@ -142,7 +142,7 @@ def generate_graph(df, col_name):
             font=dict(size=18, color="black"))
         )
         
-        # Ajout des courbes de tendance lissées pour chaque groupe (Prestataire, Annee)
+        # Ajout des courbes de tendance lissées pour chaque (Prestataire, Annee)
         prestataires = df_mean["Prestataire"].unique()
         annees = sorted(df_mean["Annee"].unique())
         for i, prest in enumerate(prestataires):
@@ -204,7 +204,6 @@ st.markdown(
 col1, col2, col3 = st.columns([1.5, 2, 1.5])
 with col2:
     st.image(LOGO_PATH, width=650, output_format="PNG", caption="")
-
 st.markdown("<h1 class='title'>Dashboard Productivité - Centrale Danone</h1>", unsafe_allow_html=True)
 
 # -----------------------------------------
@@ -221,9 +220,8 @@ else:
     st.info("Veuillez uploader votre fichier CSV d'origine.")
     st.stop()
 
-# Initialiser la base cumulée dans la session si elle n'existe pas
-if "df_cum" not in st.session_state:
-    st.session_state.df_cum = df_original.copy()
+# Pour éviter toute ambiguïté, on crée initialement notre DataFrame cumulatif
+df_cum_initial = df_original.copy()
 
 # -----------------------------------------
 # FORMULAIRE de saisie pour mise à jour
@@ -236,8 +234,8 @@ with col_year:
 with col_month:
     mois = st.selectbox("Mois", list(range(1, 13)))
 
-# Vérifier si le couple (mois, annee) existe déjà dans la base cumulée
-if ((st.session_state.df_cum["Mois"] == mois) & (st.session_state.df_cum["Annee"] == annee)).any():
+# Vérifier si le couple (Mois, Annee) existe déjà dans le DataFrame cumulatif initial
+if ((df_cum_initial["Mois"] == mois) & (df_cum_initial["Annee"] == annee)).any():
     st.error(f"Les données pour Mois={mois} et Annee={annee} existent déjà dans le fichier d'origine.")
     st.stop()
 
@@ -259,6 +257,7 @@ with st.form("ajout_data"):
                 value="20.00",
                 key=f"{prest}_{palier}_valeur"
             ).strip()
+            # Si l'un des champs est rempli, l'autre ne doit pas être vide
             if (cout_input == "" and valeur_input != "") or (cout_input != "" and valeur_input == ""):
                 st.error(f"Erreur: Pour {prest} - {palier}, remplissez à la fois 'Cout' et 'Valeur' ou laissez-les vides.")
                 st.stop()
@@ -288,57 +287,56 @@ with st.form("ajout_data"):
             nouvelles_lignes.extend(prest_lignes)
     btn_submit = st.form_submit_button("Valider")
     if btn_submit and nouvelles_lignes:
+        # Créer un DataFrame pour les nouvelles lignes
         df_new = pd.DataFrame(nouvelles_lignes)
         df_new["Mois"] = df_new["Mois"].astype(int)
         df_new["Annee"] = df_new["Annee"].astype(int)
-        # Mise à jour de la base cumulée dans la session :
-        df_cum = st.session_state.df_cum.copy()
+        # Créer un nouveau DataFrame qui combine les données initiales et les nouvelles mises à jour
+        # En cas de doublons (mêmes clés), les nouvelles valeurs remplacent les anciennes
+        df_updated = df_cum_initial.copy()
         for idx, row in df_new.iterrows():
             mask = (
-                (df_cum["Prestataire"] == row["Prestataire"]) &
-                (df_cum["Mois"] == row["Mois"]) &
-                (df_cum["Palier kilometrique"] == row["Palier kilometrique"]) &
-                (df_cum["Annee"] == row["Annee"])
+                (df_updated["Prestataire"] == row["Prestataire"]) &
+                (df_updated["Mois"] == row["Mois"]) &
+                (df_updated["Palier kilometrique"] == row["Palier kilometrique"]) &
+                (df_updated["Annee"] == row["Annee"])
             )
             if mask.any():
-                df_cum.loc[mask, "Valeur"] = row["Valeur"]
-                df_cum.loc[mask, "Cout"] = row["Cout"]
+                df_updated.loc[mask, "Valeur"] = row["Valeur"]
+                df_updated.loc[mask, "Cout"] = row["Cout"]
             else:
-                df_cum = pd.concat([df_cum, pd.DataFrame([row])], ignore_index=True)
-        st.session_state.df_cum = df_cum.copy()
+                df_updated = pd.concat([df_updated, pd.DataFrame([row])], ignore_index=True)
+        # On affiche le nombre de mises à jour et on sauvegarde le nouveau DataFrame dans la session
         st.success(f"{len(nouvelles_lignes)} mise(s) à jour effectuée(s).")
-        st.session_state.data_updated = True
+        st.session_state.df_updated = df_updated.copy()
 
 # -----------------------------------------
 # Téléchargement du CSV cumulé mis à jour
 # -----------------------------------------
-st.subheader("Télécharger le CSV mis à jour")
-df_final = st.session_state.df_cum.copy()
-csv_bytes = df_final.to_csv(index=False, encoding="utf-8-sig").encode("utf-8")
-st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
-
-# -----------------------------------------
-# Affichage des graphiques cumulatifs pour "Valeur" et "Cout"
-# -----------------------------------------
-if "data_updated" in st.session_state and st.session_state.data_updated:
-    # Graphique pour la Valeur
+if "df_updated" in st.session_state:
+    st.subheader("Télécharger le CSV cumulé mis à jour")
+    csv_bytes = st.session_state.df_updated.to_csv(index=False, encoding="utf-8-sig").encode("utf-8")
+    st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
+    
+    # -----------------------------------------
+    # Affichage des graphiques cumulés pour "Valeur" et "Cout"
+    # -----------------------------------------
     st.subheader("Graphique pour la Valeur")
-    fig_val = generate_graph(st.session_state.df_cum.copy(), "Valeur")
+    fig_val = generate_graph(st.session_state.df_updated.copy(), "Valeur")
     if fig_val is not None:
         st.plotly_chart(fig_val, use_container_width=True)
         png_val = fig_to_png_bytes(fig_val)
         if png_val:
             st.download_button("Télécharger le graphique Valeur en PNG",
                                data=png_val, file_name="graphique_valeur.png", mime="image/png")
-    # Graphique pour le Cout
+    
     st.subheader("Graphique pour le Cout")
-    fig_cout = generate_graph(st.session_state.df_cum.copy(), "Cout")
+    fig_cout = generate_graph(st.session_state.df_updated.copy(), "Cout")
     if fig_cout is not None:
         st.plotly_chart(fig_cout, use_container_width=True)
         png_cout = fig_to_png_bytes(fig_cout)
         if png_cout:
             st.download_button("Télécharger le graphique Cout en PNG",
                                data=png_cout, file_name="graphique_cout.png", mime="image/png")
-    st.session_state.data_updated = False
-
+    
 logging.debug("Fin de l'exécution de l'application.")
