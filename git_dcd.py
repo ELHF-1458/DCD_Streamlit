@@ -69,12 +69,19 @@ def convert_valeur(x):
         return np.nan
 
 def convert_cout(x):
-    """Convertit la valeur de 'Cout' en float."""
+    """Convertit la valeur de 'Cout' en float en nettoyant d'éventuels caractères parasites."""
     try:
-        return float(x)
+        # Transformer en chaîne, enlever les espaces (y compris insécables)
+        s = str(x).replace("\xa0", "").strip()
+        # Remplacer une virgule par un point, au cas où le CSV utilise la virgule pour les décimales
+        s = s.replace(",", ".")
+        # Si jamais il y a d'autres symboles (par exemple, un symbole monétaire), on les enlève
+        s = "".join(ch for ch in s if ch.isdigit() or ch == ".")
+        return float(s)
     except Exception as e:
-        logging.error("Erreur lors de la conversion de Cout '%s' : %s", x, e)
+        logging.error("Erreur lors de la conversion de Cout '%s': %s", x, e)
         return np.nan
+
 
 def generate_graph(df, col_name):
     """
@@ -219,7 +226,7 @@ if uploaded_file is not None:
     # Utilisation de la fonction de chargement qui nettoie également "Prestataire"
     df_original = load_data_from_uploaded(uploaded_file)
     st.success("Fichier d'origine chargé avec succès.")
-    st.write(df_original["Cout"].unique())
+    # st.write(df_original["Cout"].unique())
 
 else:
     st.info("Veuillez uploader votre fichier CSV d'origine.")
