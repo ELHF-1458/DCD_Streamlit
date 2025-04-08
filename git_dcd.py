@@ -86,7 +86,8 @@ def convert_cout(x):
 def generate_graph(df, col_name):
     """
     Génère le graphique à partir du DataFrame cumulé sans double-normalisation
-    pour la colonne indiquée ("Valeur" ou "Cout").
+    pour la colonne indiquée ("Valeur" ou "Cout"), en masquant les barres et en
+    affichant les courbes de tendance sous forme de lignes simples.
     """
     try:
         # Conversion de la colonne selon son type
@@ -95,23 +96,22 @@ def generate_graph(df, col_name):
         elif col_name == "Cout":
             df[col_name] = df[col_name].apply(convert_cout)
         
-        # On s'assure de nettoyer la colonne "Prestataire" si nécessaire (bien que celle-ci devrait être homogène)
+        # Normalisation des colonnes (supprimer espaces superflus, majuscules pour cohérence)
         df["Prestataire"] = df["Prestataire"].astype(str).str.strip().str.upper()
-        # On normalise également "Palier kilometrique"
         df["Palier kilometrique"] = pd.Categorical(
             df["Palier kilometrique"].astype(str).str.strip().str.upper(),
             categories=ordre_paliers,
             ordered=True
         )
         
-        # Agrégation par (Annee, Prestataire, Palier kilometrique) en calculant la moyenne
+        # Agrégation des valeurs par (Annee, Prestataire, Palier kilometrique) en calculant la moyenne
         df_mean = df.groupby(["Annee", "Prestataire", "Palier kilometrique"], as_index=False)[col_name].mean()
         
-        # Renommer la colonne agrégée
+        # Renommer la colonne agrégée pour la suite
         new_col = f"{col_name} Normalisé"
         df_mean.rename(columns={col_name: new_col}, inplace=True)
         
-        # Création de l'histogramme avec Plotly Express
+        # Création de l'histogramme (qui génère initialement des traces de type bar)
         fig = px.histogram(
             df_mean,
             x="Palier kilometrique",
@@ -122,6 +122,11 @@ def generate_graph(df, col_name):
             category_orders={"Palier kilometrique": ordre_paliers},
             color_discrete_map=couleur_barres
         )
+        
+        # Masquer les barres de l'histogramme
+        fig.data = []
+        
+        # Mise à jour de la mise en page
         fig.update_layout(
             title=dict(
                 text=f"<b>Évolution et Dispersion de {col_name} par Palier et Prestataire par an</b>",
@@ -154,7 +159,7 @@ def generate_graph(df, col_name):
             font=dict(size=18, color="black"))
         )
         
-        # Ajout des courbes de tendance lissées pour chaque groupe (Prestataire, Annee)
+        # Ajout des courbes de tendance sous forme de lignes (pas de spline) pour chaque groupe (Prestataire, Année)
         prestataires = df_mean["Prestataire"].unique()
         annees = sorted(df_mean["Annee"].unique())
         for i, prest in enumerate(prestataires):
@@ -168,11 +173,12 @@ def generate_graph(df, col_name):
                 trace_trend = go.Scatter(
                     x=df_sub["Palier kilometrique"].tolist(),
                     y=df_sub[new_col].values,
-                    mode="lines",
+                    mode="lines",  # Affichage sous forme de ligne
                     line=dict(
                         color=couleur_barres.get(annee, "#000000"),
-                        dash="dash",
-                        shape="spline"
+                        dash="solid",         # Ligne continue (pas en tirets)
+                        shape="linear",         # Ligne droite (pas de courbe spline)
+                        width=3
                     ),
                     name=f"Tendance {annee}",
                     legendgroup=str(annee),
@@ -186,6 +192,7 @@ def generate_graph(df, col_name):
         st.error("Une erreur est survenue lors de la génération du graphique.")
         logging.error("Erreur dans generate_graph pour %s : %s", col_name, e)
         return None
+
 
 def fig_to_png_bytes(fig):
     """Convertit la figure Plotly en image PNG et retourne un objet BytesIO."""
