@@ -177,7 +177,7 @@ def generate_graph(df, col_name):
                     line=dict(
                         color=couleur_barres.get(annee, "#000000"),
                         dash="solid",         # Ligne continue (pas en tirets)
-                        shape="linear",         # Ligne droite (pas de courbe spline)
+                        shape="spline",         # Ligne droite (pas de courbe spline)
                         width=3
                     ),
                     name=f"Tendance {annee}",
