@@ -275,17 +275,22 @@ with st.form("ajout_data"):
         for palier in ordre_paliers:
             cout_input = st.text_input(
                 f"{prest} - {palier} (Cout)",
-                value="",
+                value="",  # Champ vide par défaut pour accélérer les tests
                 key=f"{prest}_{palier}_cout"
             ).strip()
             valeur_input = st.text_input(
                 f"{prest} - {palier} (Valeur)",
-                value="",
+                value="",  # Champ vide par défaut
                 key=f"{prest}_{palier}_valeur"
             ).strip()
-            # Vérification qu'un champ n'est pas rempli sans l'autre
+            
+            # S'il n'y a aucune donnée saisie pour ce palier, on passe au suivant
+            if cout_input == "" and valeur_input == "":
+                continue
+            
+            # Vérifier qu'un champ n'est pas rempli sans l'autre
             if (cout_input == "" and valeur_input != "") or (cout_input != "" and valeur_input == ""):
-                st.error(f"Erreur: Pour {prest} - {palier}, remplissez à la fois 'Cout' et 'Valeur' ou laissez-les vides.")
+                st.error(f"Erreur: Pour {prest} - {palier}, remplissez à la fois 'Cout' et 'Valeur' ou laissez-les toutes les deux vides.")
                 st.stop()
             try:
                 cout_num = float(cout_input)
@@ -296,14 +301,17 @@ with st.form("ajout_data"):
             sum_cout += cout_num
             sum_valeur += valeur_num
             prest_lignes.append({
-                "Prestataire": prest.strip().upper(),  # On force le nettoyage ici
+                "Prestataire": prest.strip().upper(),  # Nettoyage de la chaîne
                 "Mois": mois,
-                "Palier kilometrique": palier.strip().upper(),  # On s'assure du format
+                "Palier kilometrique": palier.strip().upper(),  # Normalisation du palier
                 "Annee": annee,
                 "Cout": f"{cout_num:.2f}",
                 "Valeur": f"{valeur_num:.2f}%"  # Format attendu pour Valeur
             })
+        
+        # Si l'utilisateur a saisi au moins une donnée pour ce prestataire, contrôler les sommes
         if prest_lignes:
+            # On contrôle si la somme des valeurs saisies est proche de 100 (ou non, selon vos règles)
             if abs(sum_valeur - 100.00) > 1e-2:
                 st.error(f"Erreur: La somme des 'Valeur' pour {prest} est {sum_valeur:.2f} et doit être exactement 100.00.")
                 st.stop()
@@ -311,14 +319,13 @@ with st.form("ajout_data"):
                 st.error(f"Erreur: La somme des 'Cout' pour {prest} est {sum_cout:.2f} et doit être exactement 100.00.")
                 st.stop()
             nouvelles_lignes.extend(prest_lignes)
+    
     btn_submit = st.form_submit_button("Valider")
     if btn_submit and nouvelles_lignes:
-        # Créer un DataFrame à partir des nouvelles lignes
         df_new = pd.DataFrame(nouvelles_lignes)
         df_new["Mois"] = df_new["Mois"].astype(int)
         df_new["Annee"] = df_new["Annee"].astype(int)
-        # Fusionner les anciennes données (df_cum_initial) avec les nouvelles mises à jour
-        # En cas de même clés, les nouvelles valeurs remplacent les anciennes
+        # Fusionner avec le DataFrame cumulé initial (df_cum_initial)
         df_updated = df_cum_initial.copy()
         for idx, row in df_new.iterrows():
             mask = (
@@ -333,8 +340,8 @@ with st.form("ajout_data"):
             else:
                 df_updated = pd.concat([df_updated, pd.DataFrame([row])], ignore_index=True)
         st.success(f"{len(nouvelles_lignes)} mise(s) à jour effectuée(s).")
-        # Stocker le DataFrame mis à jour dans la session pour l'utiliser dans les graphiques
         st.session_state.df_updated = df_updated.copy()
+
 
 # -----------------------------------------
 # Téléchargement et affichage si des données mises à jour existent
