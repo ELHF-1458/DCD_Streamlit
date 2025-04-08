@@ -219,6 +219,8 @@ if uploaded_file is not None:
     # Utilisation de la fonction de chargement qui nettoie également "Prestataire"
     df_original = load_data_from_uploaded(uploaded_file)
     st.success("Fichier d'origine chargé avec succès.")
+    st.write(df_original["Cout"].unique())
+
 else:
     st.info("Veuillez uploader votre fichier CSV d'origine.")
     st.stop()
