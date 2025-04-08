@@ -87,7 +87,8 @@ def generate_graph(df, col_name):
     """
     Génère le graphique à partir du DataFrame cumulé sans double-normalisation
     pour la colonne indiquée ("Valeur" ou "Cout"), en masquant les barres et en
-    affichant les courbes de tendance sous forme de lignes simples.
+    affichant les courbes de tendance sous forme de lignes simples, avec la légende
+    des années affichée.
     """
     try:
         # Conversion de la colonne selon son type
@@ -162,6 +163,7 @@ def generate_graph(df, col_name):
         # Ajout des courbes de tendance sous forme de lignes (pas de spline) pour chaque groupe (Prestataire, Année)
         prestataires = df_mean["Prestataire"].unique()
         annees = sorted(df_mean["Annee"].unique())
+        already_plotted = set()  # Pour gérer la légende par année
         for i, prest in enumerate(prestataires):
             xaxis_name = "x" if i == 0 else f"x{i+1}"
             yaxis_name = "y" if i == 0 else f"y{i+1}"
@@ -170,19 +172,23 @@ def generate_graph(df, col_name):
                 if df_sub.empty or df_sub.shape[0] < 2:
                     continue
                 df_sub = df_sub.sort_values("Palier kilometrique")
+                # Affichage de la légende seulement pour la première trace de l'année
+                showlegend = (annee not in already_plotted)
+                if showlegend:
+                    already_plotted.add(annee)
                 trace_trend = go.Scatter(
                     x=df_sub["Palier kilometrique"].tolist(),
                     y=df_sub[new_col].values,
                     mode="lines",  # Affichage sous forme de ligne
                     line=dict(
                         color=couleur_barres.get(annee, "#000000"),
-                        dash="solid",         # Ligne continue (pas en tirets)
+                        dash="dash",         # Ligne continue (pas en tirets)
                         shape="linear",         # Ligne droite (pas de courbe spline)
                         width=3
                     ),
                     name=f"Tendance {annee}",
                     legendgroup=str(annee),
-                    showlegend=True
+                    showlegend=showlegend
                 )
                 trace_trend.update(xaxis=xaxis_name, yaxis=yaxis_name)
                 fig.add_trace(trace_trend)
