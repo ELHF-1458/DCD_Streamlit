@@ -3,15 +3,14 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import os
 import datetime
 from io import BytesIO
 import logging
 
 # -----------------------------------------
-# Configuration du logging
+# Configuration du logging (écrit dans le dossier courant)
 # -----------------------------------------
-LOG_PATH = r"C:\Users\lenovo\Downloads\app_debug.log"
+LOG_PATH = "app_debug.log"
 logging.basicConfig(
     level=logging.DEBUG,
     filename=LOG_PATH,
@@ -23,10 +22,10 @@ logging.debug("Début de l'exécution de l'application.")
 # -----------------------------------------
 # Paramètres et constantes
 # -----------------------------------------
-OUTPUT_CSV_PATH = r"C:\Users\lenovo\Downloads\Data_CD\donnees_unifiees_mis_a_jour.csv"
-LOGO_PATH = os.path.join(r"C:\Users\lenovo\Downloads\Data_CD", "Centrale-Danone-Logo.png")
+OUTPUT_CSV_PATH = "donnees_unifiees_mis_a_jour.csv"  # Fichier de sortie relatif
+LOGO_PATH = "Centrale-Danone-Logo.png"  # Le logo doit être dans le même répertoire que le script
 
-# Les colonnes attendues dans le CSV d'entrée : 
+# Les colonnes attendues dans le CSV d'entrée :
 # "Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
@@ -36,12 +35,14 @@ couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
 # Fonctions utilitaires
 # -----------------------------------------
 def load_data_from_uploaded(file) -> pd.DataFrame:
-    """Lit le CSV uploadé (encodage 'utf-8-sig') et convertit 'Mois' et 'Annee' en int."""
+    """Lit le CSV uploadé avec encodage 'utf-8-sig' et convertit 'Mois' et 'Annee' en int."""
     try:
         df = pd.read_csv(file, encoding="utf-8-sig")
         if not df.empty:
             df["Mois"] = pd.to_numeric(df["Mois"], errors="coerce").fillna(0).astype(int)
             df["Annee"] = pd.to_numeric(df["Annee"], errors="coerce").fillna(0).astype(int)
+            # Uniformiser la clé de regroupement
+            df["Palier kilometrique"] = df["Palier kilometrique"].str.strip().str.upper()
         logging.debug("Données chargées depuis le fichier uploadé.")
         return df
     except Exception as e:
@@ -78,31 +79,28 @@ def convert_cout(x):
 
 def generate_graph(df, col_name):
     """
-    Génère le graphique à partir du DataFrame pour la colonne spécifiée (col_name),
-    en reproduisant la même logique que votre ancien script (utilisation d'un histogramme pour le layout,
-    puis ajout des courbes de tendance lissées) sans refaire de normalisation.
+    Génère le graphique à partir du DataFrame pour la colonne spécifiée (col_name)
+    en reproduisant la même logique que votre ancien script :
+      - Conversion de la colonne (et uniformisation de "Palier kilometrique")
+      - Agrégation par (Annee, Prestataire, Palier kilometrique)
+      - Création d'un histogramme avec px.histogram pour obtenir le layout,
+      - Suppression des barres et ajout des courbes de tendance lissées (spline).
     """
     try:
-        # 1) Convertir la colonne ciblée en float
         if col_name == "Valeur":
             df[col_name] = df[col_name].apply(convert_valeur)
         elif col_name == "Cout":
             df[col_name] = df[col_name].apply(convert_cout)
-
-        # 2) Mettre "Palier kilometrique" en catégorie ordonnée
+        
+        df["Palier kilometrique"] = df["Palier kilometrique"].str.strip().str.upper()
         df["Palier kilometrique"] = pd.Categorical(
             df["Palier kilometrique"],
             categories=ordre_paliers,
             ordered=True
         )
-
-        # 3) Agréger les données par (Annee, Prestataire, Palier kilometrique) en calculant la moyenne
         df_mean = df.groupby(["Annee", "Prestataire", "Palier kilometrique"], as_index=False)[col_name].mean()
-
-        # 4) Renommer la colonne pour garder la cohérence (ex: "Valeur Normalisée")
         df_mean.rename(columns={col_name: f"{col_name} Normalisée"}, inplace=True)
-
-        # 5) Création du graphique de base à partir d’un histogramme pour bénéficier du layout
+        
         fig = px.histogram(
             df_mean,
             x="Palier kilometrique",
@@ -113,6 +111,8 @@ def generate_graph(df, col_name):
             category_orders={"Palier kilometrique": ordre_paliers},
             color_discrete_map=couleur_barres
         )
+        # Supprimer les traces d'histogramme
+        fig.data = []
         fig.update_layout(
             title=dict(
                 text=f"<b>Évolution et Dispersion du {col_name} par Palier et Prestataire par an</b>",
@@ -142,7 +142,8 @@ def generate_graph(df, col_name):
                 fig.layout[axis].gridwidth = 1
         fig.for_each_annotation(lambda a: a.update(text=f"<b>{a.text.split('=')[-1].strip()}</b>",
                                                     font=dict(size=18, color="black")))
-        # 6) Tracer les courbes de tendance lissées
+        
+        # Ajout des courbes de tendance lissées
         prestataires = df_mean["Prestataire"].unique()
         annees = sorted(df_mean["Annee"].unique())
         for i, prest in enumerate(prestataires):
@@ -160,7 +161,8 @@ def generate_graph(df, col_name):
                     line=dict(
                         color=couleur_barres.get(annee, "#000000"),
                         dash="dash",
-                        shape="spline"
+                        shape="spline",
+                        width=3
                     ),
                     name=f"Tendance {annee}",
                     legendgroup=str(annee),
@@ -168,7 +170,6 @@ def generate_graph(df, col_name):
                 )
                 trace_trend.update(xaxis=xaxis_name, yaxis=yaxis_name)
                 fig.add_trace(trace_trend)
-
         return fig
     except Exception as e:
         st.error("Une erreur est survenue lors de la génération du graphique.")
@@ -200,24 +201,25 @@ st.markdown(
     """, unsafe_allow_html=True
 )
 
-# Affichage du logo centré
+# Affichage du logo centré (en utilisant un chemin relatif)
 col1, col2, col3 = st.columns([1.5, 2, 1.5])
 with col2:
     if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, use_container_width=False, width=650)
+        st.image(LOGO_PATH, width=650, output_format="PNG", caption="")  # Pas de use_container_width ici
     else:
         st.write("Logo non trouvé.")
 
 st.markdown("<h1 class='title'>Dashboard Productivité - Centrale Danone</h1>", unsafe_allow_html=True)
 
 # -----------------------------------------
-# UPLOAD du fichier d'entrée
+# UPLOAD du fichier d'entrée (fichier d'origine)
 # -----------------------------------------
-uploaded_file = st.file_uploader("Uploader votre CSV d'origine (ex : donnees_unifiees_original.csv)", type=["csv"])
+uploaded_file = st.file_uploader("Uploader votre CSV d'origine (ex: donnees_unifiees_original.csv)", type=["csv"])
 if uploaded_file is not None:
     df_original = pd.read_csv(uploaded_file, encoding="utf-8-sig")
     df_original["Mois"] = pd.to_numeric(df_original["Mois"], errors="coerce").fillna(0).astype(int)
     df_original["Annee"] = pd.to_numeric(df_original["Annee"], errors="coerce").fillna(0).astype(int)
+    df_original["Palier kilometrique"] = df_original["Palier kilometrique"].str.strip().str.upper()
     st.success("Fichier d'origine chargé avec succès.")
 else:
     st.info("Veuillez uploader votre fichier CSV d'origine.")
@@ -238,7 +240,7 @@ with col_year:
 with col_month:
     mois = st.selectbox("Mois", list(range(1, 13)))
 
-# Vérifier si le couple (mois, annee) existe déjà dans le cumul
+# Vérifier si le couple (mois, annee) existe déjà dans le cumul (avant mise à jour)
 if ((st.session_state.df_cum["Mois"] == mois) & (st.session_state.df_cum["Annee"] == annee)).any():
     st.error(f"Les données pour Mois={mois} et Annee={annee} existent déjà dans le fichier d'origine.")
     st.stop()
@@ -249,7 +251,7 @@ with st.form("ajout_data"):
         st.markdown(f"### {prest}")
         sum_valeur = 0.0
         sum_cout = 0.0
-        prest_lignes = []
+        prest_lignes = []  # Stocke les lignes pour ce prestataire
         for palier in ordre_paliers:
             # Champs pré-remplis avec "20.00"
             cout_input = st.text_input(
@@ -282,6 +284,7 @@ with st.form("ajout_data"):
                 "Cout": f"{cout_num:.2f}",
                 "Valeur": f"{valeur_num:.2f}%"
             })
+        # Valider que la somme pour ce prestataire est exactement 100.00 pour chaque colonne
         if prest_lignes:
             if abs(sum_valeur - 100.00) > 1e-2:
                 st.error(f"Erreur: La somme des 'Valeur' pour {prest} est {sum_valeur:.2f} et doit être exactement 100.00.")
