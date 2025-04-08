@@ -9,7 +9,7 @@ from io import BytesIO
 import logging
 
 # -----------------------------------------
-# Configuration du logging
+# Configuration du logging (ici dans le fichier courant)
 # -----------------------------------------
 LOG_PATH = r"C:\Users\lenovo\Downloads\app_debug.log"
 logging.basicConfig(
@@ -23,11 +23,12 @@ logging.debug("Début de l'exécution de l'application.")
 # -----------------------------------------
 # Paramètres et constantes
 # -----------------------------------------
-# Le fichier d'origine sera uploadé par l'utilisateur (nom quelconque)
-# Le fichier de sortie cumulant toutes les mises à jour sera enregistré ici
+# Fichier de sortie cumulant toutes les mises à jour
 OUTPUT_CSV_PATH = r"C:\Users\lenovo\Downloads\Data_CD\donnees_unifiees_mis_a_jour.csv"
 LOGO_PATH = os.path.join(r"C:\Users\lenovo\Downloads\Data_CD", "Centrale-Danone-Logo.png")
 
+# Les colonnes attendues dans le fichier d'entrée sont désormais :
+# "Prestataire", "Mois", "Palier kilométrique", "Année", "Cout", "Valeur"
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
 couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
@@ -36,9 +37,12 @@ couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
 # Fonctions utilitaires
 # -----------------------------------------
 def load_data_from_uploaded(file) -> pd.DataFrame:
-    """Lit le CSV uploadé en s’assurant que 'Mois' et 'Année' sont des entiers."""
+    """
+    Lit le CSV uploadé en s’assurant que 'Mois' et 'Année' sont des entiers.
+    Utilise l'encodage 'utf-8-sig' pour gérer correctement les accents.
+    """
     try:
-        df = pd.read_csv(file)
+        df = pd.read_csv(file, encoding="utf-8-sig")
         if not df.empty:
             df["Mois"] = pd.to_numeric(df["Mois"], errors="coerce").astype(int)
             df["Année"] = pd.to_numeric(df["Année"], errors="coerce").astype(int)
@@ -51,13 +55,13 @@ def load_data_from_uploaded(file) -> pd.DataFrame:
 def save_data(df, csv_path):
     """Sauvegarde le DataFrame dans le CSV."""
     try:
-        df.to_csv(csv_path, index=False)
+        df.to_csv(csv_path, index=False, encoding="utf-8-sig")
         logging.debug("Données sauvegardées dans %s", csv_path)
     except Exception as e:
         logging.error("Erreur lors de la sauvegarde des données : %s", e)
 
 def convert_valeur(x):
-    """Convertit 'XX%' en float(XX)."""
+    """Convertit une valeur au format 'XX%' en float(XX)."""
     try:
         s = str(x)
         if "%" in s:
@@ -65,28 +69,29 @@ def convert_valeur(x):
         else:
             return float(s)
     except Exception as e:
-        logging.error("Erreur lors de la conversion de Valeur '%s' : %s", x, e)
+        logging.error("Erreur lors de la conversion de la valeur '%s' : %s", x, e)
         return np.nan
 
 def generate_graph(df):
     """
-    Génère un line chart (courbe de tendance) à partir du DataFrame.
-    Le graphique affiche, pour chaque prestataire (facettes) et année (couleurs), la moyenne des valeurs pour chaque palier.
-    La colonne "Cout" n'est pas utilisée dans ce graphique.
+    Génère un line chart (courbe) à partir du DataFrame.
+    Le graphique affiche l'évolution des moyennes de la "Valeur" (convertie en nombre)
+    par "Palier kilométrique", pour chaque Prestataire (en facettes) et par Année (couleurs).
+    La colonne "Cout" n'est pas utilisée dans le graphique.
     """
     try:
-        # 1) Convertir la colonne "Valeur" (format "XX%") en float XX
+        # Conversion de "Valeur" (par exemple "43.75%") en float
         df["Valeur"] = df["Valeur"].apply(convert_valeur)
-        # 2) Mettre "Palier kilométrique" en catégorie ordonnée
+        # Transformer "Palier kilométrique" en catégorie ordonnée
         df["Palier kilométrique"] = pd.Categorical(
             df["Palier kilométrique"],
             categories=ordre_paliers,
             ordered=True
         )
-        # 3) Agréger les pourcentages par (Année, Prestataire, Palier) en calculant la moyenne
+        # Agréger les valeurs par (Année, Prestataire, Palier) en calculant la moyenne
         df_mean = df.groupby(["Année", "Prestataire", "Palier kilométrique"], as_index=False)["Valeur"].mean()
         df_mean.rename(columns={"Valeur": "Valeur Normalisée"}, inplace=True)
-        # 4) Générer un line chart avec Plotly Express (au lieu d'un histogramme)
+        # Générer le line chart avec Plotly Express (facettes par Prestataire)
         fig = px.line(
             df_mean,
             x="Palier kilométrique",
@@ -155,11 +160,11 @@ st.markdown(
     """, unsafe_allow_html=True
 )
 
-# Affichage du logo centré
+# Affichage du logo centré (remarquez que nous supprimons use_container_width)
 col1, col2, col3 = st.columns([1.5, 2, 1.5])
 with col2:
     if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=650, output_format="PNG", caption="", use_column_width=False)
+        st.image(LOGO_PATH, width=650, output_format="PNG", caption="")
     else:
         st.write("Logo non trouvé.")
 
@@ -170,8 +175,8 @@ st.markdown("<h1 class='title'>Dashboard Productivité - Centrale Danone</h1>", 
 # -----------------------------------------
 uploaded_file = st.file_uploader("Uploader votre CSV d'origine (ex: donnees_unifiees_original.csv)", type=["csv"])
 if uploaded_file is not None:
-    df_original = pd.read_csv(uploaded_file)
-    # Conversion des colonnes "Mois" et "Année" en int
+    df_original = pd.read_csv(uploaded_file, encoding="utf-8-sig")
+    # Convertir 'Mois' et 'Année'
     df_original["Mois"] = pd.to_numeric(df_original["Mois"], errors="coerce").fillna(0).astype(int)
     df_original["Année"] = pd.to_numeric(df_original["Année"], errors="coerce").fillna(0).astype(int)
     st.success("Fichier d'origine chargé avec succès.")
@@ -179,14 +184,14 @@ else:
     st.info("Veuillez uploader votre fichier CSV d'origine.")
     st.stop()
 
-# Initialiser la session avec les données originales s'il n'y a pas encore de mises à jour
+# Initialiser la session avec les données originales si aucune mise à jour n'existe
 if "df_cum" not in st.session_state:
     st.session_state.df_cum = df_original.copy()
 
 # -----------------------------------------
-# FORMULAIRE de saisie des données
+# FORMULAIRE de saisie des données (mise à jour)
 # -----------------------------------------
-st.subheader("Ajouter des valeurs pour (Année, Mois)")
+st.subheader("Ajouter ou mettre à jour des valeurs (Cout et Valeur) pour (Année, Mois)")
 annee_defaut = datetime.datetime.now().year
 col_year, col_month = st.columns(2)
 with col_year:
@@ -194,30 +199,28 @@ with col_year:
 with col_month:
     mois = st.selectbox("Mois", list(range(1, 13)))
 
-# On prépare les listes pour stocker les valeurs de "Cout" et "Valeur"
 nouvelles_lignes = []
 with st.form("ajout_data"):
     for prest in prestataires_list:
         st.markdown(f"### {prest}")
         for palier in ordre_paliers:
-            # Champs de saisie pour Cout
+            # Champ de saisie pour Cout
             cout_input = st.text_input(
                 f"{prest} - {palier} (Cout)",
                 "",
                 placeholder="Entrez le coût",
                 key=f"{prest}_{palier}_cout"
             ).strip()
-            # Champs de saisie pour Valeur
+            # Champ de saisie pour Valeur
             valeur_input = st.text_input(
                 f"{prest} - {palier} (Valeur)",
                 "",
                 placeholder="Entrez la valeur (entre 0 et 100)",
                 key=f"{prest}_{palier}_valeur"
             ).strip()
-            # Traiter l'entrée si au moins l'un des deux champs est rempli
             if cout_input == "" and valeur_input == "":
                 continue
-            # Pour Cout, on prend simplement la conversion en float et on formate en 2 décimales (sans symbole)
+            # Pour Cout, on convertit en float et formatte avec 2 décimales
             if cout_input:
                 try:
                     cout_num = float(cout_input)
@@ -227,8 +230,7 @@ with st.form("ajout_data"):
                     continue
             else:
                 cout_str = ""
-            # Pour Valeur, la logique reste comme précédemment : on attend un nombre entre 0 et 100,
-            # et on formate avec deux décimales suivi d'un '%'
+            # Pour Valeur, on convertit en float (attendu entre 0 et 100) et formatte avec "%" 
             if valeur_input:
                 try:
                     valeur_num = float(valeur_input)
@@ -271,15 +273,15 @@ with st.form("ajout_data"):
         st.success(f"{len(nouvelles_lignes)} mise(s) à jour effectuée(s).")
 
 # -----------------------------------------
-# Bouton pour télécharger le CSV mis à jour
+# Téléchargement du CSV mis à jour
 # -----------------------------------------
 st.subheader("Télécharger le fichier CSV mis à jour")
 df_final = st.session_state.df_cum.copy()
-csv_bytes = df_final.to_csv(index=False).encode("utf-8")
+csv_bytes = df_final.to_csv(index=False, encoding="utf-8-sig").encode("utf-8")
 st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
 
 # -----------------------------------------
-# Bouton pour GÉNÉRER LE GRAPHIQUE (Line Chart)
+# Génération du graphique (Line Chart)
 # -----------------------------------------
 st.subheader("Visualisation du Graphique")
 if st.button("Générer le Graphique"):
