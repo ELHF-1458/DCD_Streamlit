@@ -26,10 +26,10 @@ logging.debug("Début de l'exécution de l'application.")
 OUTPUT_CSV_PATH = r"C:\Users\lenovo\Downloads\Data_CD\donnees_unifiees_mis_a_jour.csv"
 LOGO_PATH = os.path.join(r"C:\Users\lenovo\Downloads\Data_CD", "Centrale-Danone-Logo.png")
 
-# Liste des catégories pour le palier et des prestataires
+# Les colonnes attendues dans le fichier d'entrée sont :
+# "Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
-# Palette de couleurs pour les années
 couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
 
 # -----------------------------------------
@@ -49,7 +49,7 @@ def load_data_from_uploaded(file) -> pd.DataFrame:
         return pd.DataFrame(columns=["Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"])
 
 def save_data(df, csv_path):
-    """Sauvegarde le DataFrame dans un CSV (utf-8-sig)."""
+    """Sauvegarde le DataFrame dans un CSV avec encodage utf-8-sig."""
     try:
         df.to_csv(csv_path, index=False, encoding="utf-8-sig")
         logging.debug("Données sauvegardées dans %s", csv_path)
@@ -79,23 +79,23 @@ def convert_cout(x):
 def generate_line_chart(df, col_name):
     """
     Génère un line chart à partir du DataFrame pour la colonne spécifiée (col_name),
-    en agrégeant par (Annee, Prestataire, Palier kilometrique) avec la moyenne.
+    en regroupant par (Annee, Prestataire, Palier kilometrique) avec la moyenne.
+    Les facettes sont les Prestataires et les courbes sont colorées par Annee.
     """
     try:
-        # Conversion de la colonne ciblée
         if col_name == "Valeur":
             df[col_name] = df[col_name].apply(convert_valeur)
         elif col_name == "Cout":
             df[col_name] = df[col_name].apply(convert_cout)
-            
-        # Mettre "Palier kilometrique" en catégorie ordonnée
-        df["Palier kilometrique"] = pd.Categorical(df["Palier kilometrique"],
-                                                    categories=ordre_paliers,
-                                                    ordered=True)
-        # Agréger par (Annee, Prestataire, Palier kilometrique) en calculant la moyenne
+        
+        df["Palier kilometrique"] = pd.Categorical(
+            df["Palier kilometrique"],
+            categories=ordre_paliers,
+            ordered=True
+        )
         df_mean = df.groupby(["Annee", "Prestataire", "Palier kilometrique"], as_index=False)[col_name].mean()
         df_mean.rename(columns={col_name: "Moyenne"}, inplace=True)
-        # Générer le line chart avec Plotly Express
+        
         fig = px.line(
             df_mean,
             x="Palier kilometrique",
@@ -167,7 +167,7 @@ st.markdown(
 col1, col2, col3 = st.columns([1.5, 2, 1.5])
 with col2:
     if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=650, output_format="PNG", caption="")  # Suppression de use_container_width
+        st.image(LOGO_PATH, width=650, output_format="PNG", caption="")
     else:
         st.write("Logo non trouvé.")
 
@@ -186,12 +186,12 @@ else:
     st.info("Veuillez uploader votre fichier CSV d'origine.")
     st.stop()
 
-# Initialiser la base cumulée dans la session (si aucune mise à jour n'est présente)
+# Initialiser la base cumulée dans la session s'il n'y a pas de mises à jour
 if "df_cum" not in st.session_state:
     st.session_state.df_cum = df_original.copy()
 
 # -----------------------------------------
-# FORMULAIRE de saisie (mise à jour)
+# FORMULAIRE de saisie (mise à jour) pour Cout et Valeur
 # -----------------------------------------
 st.subheader("Ajouter ou mettre à jour des valeurs pour (Annee, Mois)")
 annee_defaut = datetime.datetime.now().year
@@ -205,70 +205,53 @@ nouvelles_lignes = []
 with st.form("ajout_data"):
     for prest in prestataires_list:
         st.markdown(f"### {prest}")
-        # Initialiser des sommes pour la validation
+        # Initialiser des sommes pour validation
         sum_valeur = 0.0
         sum_cout = 0.0
-        prest_lignes = []  # Pour stocker les lignes de ce prestataire
+        prest_lignes = []  # stocker lignes pour ce prestataire
         for palier in ordre_paliers:
-            # Champs de saisie pour Cout avec placeholder "20.00"
+            # Champs pré-remplis pour Cout et Valeur avec "20.00"
             cout_input = st.text_input(
                 f"{prest} - {palier} (Cout)",
-                "",
-                placeholder="20.00",
+                value="20.00",
                 key=f"{prest}_{palier}_cout"
             ).strip()
-            # Champs de saisie pour Valeur avec placeholder "20.00"
             valeur_input = st.text_input(
                 f"{prest} - {palier} (Valeur)",
-                "",
-                placeholder="20.00",
+                value="20.00",
                 key=f"{prest}_{palier}_valeur"
             ).strip()
+            # Si l'utilisateur modifie, les deux champs doivent être renseignés
+            if (cout_input == "" and valeur_input != "") or (cout_input != "" and valeur_input == ""):
+                st.error(f"Erreur: Pour {prest} - {palier}, vous devez remplir à la fois 'Cout' et 'Valeur' ou laisser les deux vides.")
+                st.stop()
+            # Si les deux champs sont vides, cela signifie aucune mise à jour pour ce palier
             if cout_input == "" and valeur_input == "":
                 continue
-            # Traitement de Cout
-            if cout_input:
-                try:
-                    cout_num = float(cout_input)
-                    cout_str = f"{cout_num:.2f}"
-                except ValueError:
-                    st.warning(f"Entrée invalide pour {prest} - {palier} (Cout), ignorée.")
-                    continue
-            else:
-                cout_str = ""
-            # Traitement de Valeur
-            if valeur_input:
-                try:
-                    valeur_num = float(valeur_input)
-                    if not (0 <= valeur_num <= 100):
-                        st.warning(f"Valeur hors limites pour {prest} - {palier} (Valeur), ignorée.")
-                        continue
-                    valeur_str = f"{valeur_num:.2f}%"
-                except ValueError:
-                    st.warning(f"Entrée invalide pour {prest} - {palier} (Valeur), ignorée.")
-                    continue
-            else:
-                valeur_str = ""
-            # Accumuler la somme pour validation (uniquement si une valeur est renseignée)
-            if valeur_str:
-                sum_valeur += valeur_num
-            if cout_str:
-                sum_cout += float(cout_str)
+            try:
+                cout_num = float(cout_input)
+                valeur_num = float(valeur_input)
+            except ValueError:
+                st.error(f"Erreur de conversion pour {prest} - {palier}.")
+                st.stop()
+            # Accumuler les sommes pour validation
+            sum_cout += cout_num
+            sum_valeur += valeur_num
             prest_lignes.append({
                 "Prestataire": prest,
                 "Mois": mois,
                 "Palier kilometrique": palier,
                 "Annee": annee,
-                "Cout": cout_str,
-                "Valeur": valeur_str
+                "Cout": f"{cout_num:.2f}",
+                "Valeur": f"{valeur_num:.2f}%"
             })
-        # Vérifier que, pour ce prestataire, si des valeurs ont été saisies, leur somme est égale à 100.00
+        # Vérifier que la somme pour ce prestataire est exactement 100.00 (si des valeurs ont été saisies)
         if prest_lignes:
-            if sum_valeur != 100.00:
-                st.error(f"La somme des 'Valeur' pour {prest} est {sum_valeur:.2f}, elle doit être égale à 100.00.")
+            if abs(sum_valeur - 100.00) > 1e-2:
+                st.error(f"Erreur: La somme des 'Valeur' pour {prest} est {sum_valeur:.2f} et doit être exactement 100.00.")
                 st.stop()
-            if sum_cout != 100.00:
-                st.error(f"La somme des 'Cout' pour {prest} est {sum_cout:.2f}, elle doit être égale à 100.00.")
+            if abs(sum_cout - 100.00) > 1e-2:
+                st.error(f"Erreur: La somme des 'Cout' pour {prest} est {sum_cout:.2f} et doit être exactement 100.00.")
                 st.stop()
             nouvelles_lignes.extend(prest_lignes)
     btn_submit = st.form_submit_button("Valider")
@@ -291,7 +274,6 @@ with st.form("ajout_data"):
                 df_cum = pd.concat([df_cum, pd.DataFrame([row])], ignore_index=True)
         st.session_state.df_cum = df_cum.copy()
         st.success(f"{len(nouvelles_lignes)} mise(s) à jour effectuée(s).")
-        # Indiquer que des données ont été mises à jour
         st.session_state.data_updated = True
 
 # -----------------------------------------
@@ -303,7 +285,7 @@ csv_bytes = df_final.to_csv(index=False, encoding="utf-8-sig").encode("utf-8")
 st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
 
 # -----------------------------------------
-# Génération et affichage des graphiques
+# Génération des graphiques (Line Charts) pour Valeur et Cout
 # -----------------------------------------
 if "data_updated" in st.session_state and st.session_state.data_updated:
     st.subheader("Graphique pour la Valeur")
@@ -312,21 +294,16 @@ if "data_updated" in st.session_state and st.session_state.data_updated:
         st.plotly_chart(fig_val)
         png_val = fig_to_png_bytes(fig_val)
         if png_val:
-            st.download_button("Télécharger le graphique Valeur en PNG",
-                               data=png_val,
-                               file_name="graphique_valeur.png",
-                               mime="image/png")
+            st.download_button("Télécharger le graphique Valeur en PNG", data=png_val,
+                               file_name="graphique_valeur.png", mime="image/png")
     st.subheader("Graphique pour le Cout")
     fig_cout = generate_line_chart(st.session_state.df_cum.copy(), "Cout")
     if fig_cout is not None:
         st.plotly_chart(fig_cout)
         png_cout = fig_to_png_bytes(fig_cout)
         if png_cout:
-            st.download_button("Télécharger le graphique Cout en PNG",
-                               data=png_cout,
-                               file_name="graphique_cout.png",
-                               mime="image/png")
-    # Remise à zéro du flag
+            st.download_button("Télécharger le graphique Cout en PNG", data=png_cout,
+                               file_name="graphique_cout.png", mime="image/png")
     st.session_state.data_updated = False
 
 logging.debug("Fin de l'exécution de l'application.")
