@@ -9,7 +9,7 @@ from io import BytesIO
 import logging
 
 # -----------------------------------------
-# Configuration du logging (ici dans le fichier courant)
+# Configuration du logging
 # -----------------------------------------
 LOG_PATH = r"C:\Users\lenovo\Downloads\app_debug.log"
 logging.basicConfig(
@@ -23,29 +23,25 @@ logging.debug("Début de l'exécution de l'application.")
 # -----------------------------------------
 # Paramètres et constantes
 # -----------------------------------------
-# Fichier de sortie cumulant toutes les mises à jour
 OUTPUT_CSV_PATH = r"C:\Users\lenovo\Downloads\Data_CD\donnees_unifiees_mis_a_jour.csv"
 LOGO_PATH = os.path.join(r"C:\Users\lenovo\Downloads\Data_CD", "Centrale-Danone-Logo.png")
 
-# Les colonnes attendues dans le fichier d'entrée sont désormais :
-# "Prestataire", "Mois", "Palier kilométrique", "Année", "Cout", "Valeur"
+# Ordre des paliers et liste des prestataires
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
+# Palette de couleurs pour les années
 couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
 
 # -----------------------------------------
 # Fonctions utilitaires
 # -----------------------------------------
 def load_data_from_uploaded(file) -> pd.DataFrame:
-    """
-    Lit le CSV uploadé en s’assurant que 'Mois' et 'Année' sont des entiers.
-    Utilise l'encodage 'utf-8-sig' pour gérer correctement les accents.
-    """
+    """Lit le CSV uploadé (encodage utf-8-sig) et convertit 'Mois' et 'Année' en int."""
     try:
         df = pd.read_csv(file, encoding="utf-8-sig")
         if not df.empty:
-            df["Mois"] = pd.to_numeric(df["Mois"], errors="coerce").astype(int)
-            df["Année"] = pd.to_numeric(df["Année"], errors="coerce").astype(int)
+            df["Mois"] = pd.to_numeric(df["Mois"], errors="coerce").fillna(0).astype(int)
+            df["Année"] = pd.to_numeric(df["Année"], errors="coerce").fillna(0).astype(int)
         logging.debug("Données chargées depuis le fichier uploadé.")
         return df
     except Exception as e:
@@ -53,7 +49,7 @@ def load_data_from_uploaded(file) -> pd.DataFrame:
         return pd.DataFrame(columns=["Prestataire", "Mois", "Palier kilométrique", "Année", "Cout", "Valeur"])
 
 def save_data(df, csv_path):
-    """Sauvegarde le DataFrame dans le CSV."""
+    """Sauvegarde le DataFrame dans un CSV en utf-8-sig."""
     try:
         df.to_csv(csv_path, index=False, encoding="utf-8-sig")
         logging.debug("Données sauvegardées dans %s", csv_path)
@@ -61,7 +57,7 @@ def save_data(df, csv_path):
         logging.error("Erreur lors de la sauvegarde des données : %s", e)
 
 def convert_valeur(x):
-    """Convertit une valeur au format 'XX%' en float(XX)."""
+    """Convertit une chaîne de type 'XX%' en float (XX)."""
     try:
         s = str(x)
         if "%" in s:
@@ -69,33 +65,45 @@ def convert_valeur(x):
         else:
             return float(s)
     except Exception as e:
-        logging.error("Erreur lors de la conversion de la valeur '%s' : %s", x, e)
+        logging.error("Erreur lors de la conversion de Valeur '%s' : %s", x, e)
         return np.nan
 
-def generate_graph(df):
+def convert_cout(x):
+    """Convertit la colonne 'Cout' en float (si nécessaire). On suppose ici que 'Cout' est déjà au format numérique (sans %)."""
+    try:
+        return float(x)
+    except Exception as e:
+        logging.error("Erreur lors de la conversion de Cout '%s' : %s", x, e)
+        return np.nan
+
+def generate_line_chart(df, col_name):
     """
-    Génère un line chart (courbe) à partir du DataFrame.
-    Le graphique affiche l'évolution des moyennes de la "Valeur" (convertie en nombre)
-    par "Palier kilométrique", pour chaque Prestataire (en facettes) et par Année (couleurs).
-    La colonne "Cout" n'est pas utilisée dans le graphique.
+    Génère un line chart à partir du DataFrame pour la colonne spécifiée (col_name),
+    en agrégant par (Année, Prestataire, Palier kilométrique).
+    Le graphique est constitué de facettes par Prestataire et les courbes (colorées par Année).
     """
     try:
-        # Conversion de "Valeur" (par exemple "43.75%") en float
-        df["Valeur"] = df["Valeur"].apply(convert_valeur)
-        # Transformer "Palier kilométrique" en catégorie ordonnée
+        # Conversion de la colonne ciblée
+        if col_name == "Valeur":
+            df[col_name] = df[col_name].apply(convert_valeur)
+        elif col_name == "Cout":
+            df[col_name] = df[col_name].apply(convert_cout)
+        
+        # Mettre "Palier kilométrique" en catégorie ordonnée
         df["Palier kilométrique"] = pd.Categorical(
             df["Palier kilométrique"],
             categories=ordre_paliers,
             ordered=True
         )
-        # Agréger les valeurs par (Année, Prestataire, Palier) en calculant la moyenne
-        df_mean = df.groupby(["Année", "Prestataire", "Palier kilométrique"], as_index=False)["Valeur"].mean()
-        df_mean.rename(columns={"Valeur": "Valeur Normalisée"}, inplace=True)
-        # Générer le line chart avec Plotly Express (facettes par Prestataire)
+        # Agréger par (Année, Prestataire, Palier) en prenant la moyenne de la colonne
+        df_mean = df.groupby(["Année", "Prestataire", "Palier kilométrique"], as_index=False)[col_name].mean()
+        df_mean.rename(columns={col_name: "Moyenne"}, inplace=True)
+        
+        # Générer un line chart (avec marqueurs) avec Plotly Express
         fig = px.line(
             df_mean,
             x="Palier kilométrique",
-            y="Valeur Normalisée",
+            y="Moyenne",
             color="Année",
             markers=True,
             facet_col="Prestataire",
@@ -103,12 +111,12 @@ def generate_graph(df):
         )
         fig.update_layout(
             title=dict(
-                text="<b>Évolution et Dispersion du Kilométrage par Palier et Prestataire par an</b>",
+                text=f"<b>Évolution et Dispersion du {col_name} par Palier et Prestataire par an</b>",
                 font=dict(size=24, family="Arial", color="black")
             ),
             title_x=0.5,
             xaxis_title="Palier kilométrique",
-            yaxis_title="Moyenne de la Valeur (%)",
+            yaxis_title=f"Moyenne du {col_name}",
             legend_title="Année",
             legend_title_font=dict(color="black", size=16),
             legend=dict(font=dict(color="black")),
@@ -116,7 +124,7 @@ def generate_graph(df):
             paper_bgcolor="white",
             plot_bgcolor="white"
         )
-        # Mise à jour de la grille et des axes
+        # Mise à jour de la grille et du style des axes
         for axis in fig.layout:
             if axis.startswith("xaxis"):
                 fig.layout[axis].title.font = dict(color="black", size=16)
@@ -132,8 +140,8 @@ def generate_graph(df):
                                                     font=dict(size=18, color="black")))
         return fig
     except Exception as e:
-        logging.error("Erreur lors de la génération du graphique : %s", e)
-        st.error("Une erreur est survenue lors de la génération du graphique.")
+        logging.error("Erreur lors de la génération du graphique pour %s : %s", col_name, e)
+        st.error(f"Erreur lors de la génération du graphique pour {col_name}.")
         return None
 
 def fig_to_png_bytes(fig):
@@ -160,7 +168,7 @@ st.markdown(
     """, unsafe_allow_html=True
 )
 
-# Affichage du logo centré (remarquez que nous supprimons use_container_width)
+# Affichage du logo centré
 col1, col2, col3 = st.columns([1.5, 2, 1.5])
 with col2:
     if os.path.exists(LOGO_PATH):
@@ -173,10 +181,10 @@ st.markdown("<h1 class='title'>Dashboard Productivité - Centrale Danone</h1>", 
 # -----------------------------------------
 # UPLOAD du fichier d'entrée
 # -----------------------------------------
-uploaded_file = st.file_uploader("Uploader votre CSV d'origine (ex: donnees_unifiees_original.csv)", type=["csv"])
+uploaded_file = st.file_uploader("Uploader votre CSV d'origine (ex : donnees_unifiees_original.csv)", type=["csv"])
 if uploaded_file is not None:
     df_original = pd.read_csv(uploaded_file, encoding="utf-8-sig")
-    # Convertir 'Mois' et 'Année'
+    # Convertir 'Mois' et 'Année' en int
     df_original["Mois"] = pd.to_numeric(df_original["Mois"], errors="coerce").fillna(0).astype(int)
     df_original["Année"] = pd.to_numeric(df_original["Année"], errors="coerce").fillna(0).astype(int)
     st.success("Fichier d'origine chargé avec succès.")
@@ -184,14 +192,14 @@ else:
     st.info("Veuillez uploader votre fichier CSV d'origine.")
     st.stop()
 
-# Initialiser la session avec les données originales si aucune mise à jour n'existe
+# Initialiser la session avec les données originales s'il n'y a pas de mises à jour
 if "df_cum" not in st.session_state:
     st.session_state.df_cum = df_original.copy()
 
 # -----------------------------------------
-# FORMULAIRE de saisie des données (mise à jour)
+# FORMULAIRE de saisie (mise à jour) pour Cout et Valeur
 # -----------------------------------------
-st.subheader("Ajouter ou mettre à jour des valeurs (Cout et Valeur) pour (Année, Mois)")
+st.subheader("Ajouter ou mettre à jour des valeurs pour (Année, Mois)")
 annee_defaut = datetime.datetime.now().year
 col_year, col_month = st.columns(2)
 with col_year:
@@ -220,7 +228,7 @@ with st.form("ajout_data"):
             ).strip()
             if cout_input == "" and valeur_input == "":
                 continue
-            # Pour Cout, on convertit en float et formatte avec 2 décimales
+            # Traitement de Cout
             if cout_input:
                 try:
                     cout_num = float(cout_input)
@@ -230,7 +238,7 @@ with st.form("ajout_data"):
                     continue
             else:
                 cout_str = ""
-            # Pour Valeur, on convertit en float (attendu entre 0 et 100) et formatte avec "%" 
+            # Traitement de Valeur
             if valeur_input:
                 try:
                     valeur_num = float(valeur_input)
@@ -275,27 +283,34 @@ with st.form("ajout_data"):
 # -----------------------------------------
 # Téléchargement du CSV mis à jour
 # -----------------------------------------
-st.subheader("Télécharger le fichier CSV mis à jour")
+st.subheader("Télécharger le CSV mis à jour")
 df_final = st.session_state.df_cum.copy()
 csv_bytes = df_final.to_csv(index=False, encoding="utf-8-sig").encode("utf-8")
 st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
 
 # -----------------------------------------
-# Génération du graphique (Line Chart)
+# Génération des graphiques (Line Charts) pour Valeur et Cout
 # -----------------------------------------
-st.subheader("Visualisation du Graphique")
-if st.button("Générer le Graphique"):
-    df_data = st.session_state.df_cum.copy()
-    fig = generate_graph(df_data)
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-        png_bytes = fig_to_png_bytes(fig)
-        if png_bytes:
-            st.download_button("Télécharger le Graphique en PNG",
-                               data=png_bytes,
-                               file_name="graphique_productivite.png",
-                               mime="image/png")
-    else:
-        st.error("Le graphique n'a pas pu être généré.")
+st.subheader("Visualisation des Graphiques")
+
+col_chart1, col_chart2 = st.columns(2)
+with col_chart1:
+    st.markdown("#### Graphique pour la Valeur")
+    fig_val = generate_line_chart(st.session_state.df_cum.copy(), "Valeur")
+    if fig_val is not None:
+        st.plotly_chart(fig_val)
+        png_val = fig_to_png_bytes(fig_val)
+        if png_val:
+            st.download_button("Télécharger le graphique Valeur en PNG", data=png_val,
+                               file_name="graphique_valeur.png", mime="image/png")
+with col_chart2:
+    st.markdown("#### Graphique pour le Cout")
+    fig_cout = generate_line_chart(st.session_state.df_cum.copy(), "Cout")
+    if fig_cout is not None:
+        st.plotly_chart(fig_cout)
+        png_cout = fig_to_png_bytes(fig_cout)
+        if png_cout:
+            st.download_button("Télécharger le graphique Cout en PNG", data=png_cout,
+                               file_name="graphique_cout.png", mime="image/png")
 
 logging.debug("Fin de l'exécution de l'application.")
