@@ -29,24 +29,24 @@ LOGO_PATH = os.path.join(r"C:\Users\lenovo\Downloads\Data_CD", "Centrale-Danone-
 # Ordre des paliers et liste des prestataires
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
-# Palette de couleurs pour les années
+# Palette de couleurs pour les Annees
 couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
 
 # -----------------------------------------
 # Fonctions utilitaires
 # -----------------------------------------
 def load_data_from_uploaded(file) -> pd.DataFrame:
-    """Lit le CSV uploadé (encodage utf-8-sig) et convertit 'Mois' et 'Année' en int."""
+    """Lit le CSV uploadé (encodage utf-8-sig) et convertit 'Mois' et 'Annee' en int."""
     try:
         df = pd.read_csv(file, encoding="utf-8-sig")
         if not df.empty:
             df["Mois"] = pd.to_numeric(df["Mois"], errors="coerce").fillna(0).astype(int)
-            df["Année"] = pd.to_numeric(df["Année"], errors="coerce").fillna(0).astype(int)
+            df["Annee"] = pd.to_numeric(df["Annee"], errors="coerce").fillna(0).astype(int)
         logging.debug("Données chargées depuis le fichier uploadé.")
         return df
     except Exception as e:
         logging.error("Erreur lors du chargement du fichier uploadé : %s", e)
-        return pd.DataFrame(columns=["Prestataire", "Mois", "Palier kilométrique", "Année", "Cout", "Valeur"])
+        return pd.DataFrame(columns=["Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"])
 
 def save_data(df, csv_path):
     """Sauvegarde le DataFrame dans un CSV en utf-8-sig."""
@@ -79,8 +79,8 @@ def convert_cout(x):
 def generate_line_chart(df, col_name):
     """
     Génère un line chart à partir du DataFrame pour la colonne spécifiée (col_name),
-    en agrégant par (Année, Prestataire, Palier kilométrique).
-    Le graphique est constitué de facettes par Prestataire et les courbes (colorées par Année).
+    en agrégant par (Annee, Prestataire, Palier kilometrique).
+    Le graphique est constitué de facettes par Prestataire et les courbes (colorées par Annee).
     """
     try:
         # Conversion de la colonne ciblée
@@ -89,25 +89,25 @@ def generate_line_chart(df, col_name):
         elif col_name == "Cout":
             df[col_name] = df[col_name].apply(convert_cout)
         
-        # Mettre "Palier kilométrique" en catégorie ordonnée
-        df["Palier kilométrique"] = pd.Categorical(
-            df["Palier kilométrique"],
+        # Mettre "Palier kilometrique" en catégorie ordonnée
+        df["Palier kilometrique"] = pd.Categorical(
+            df["Palier kilometrique"],
             categories=ordre_paliers,
             ordered=True
         )
-        # Agréger par (Année, Prestataire, Palier) en prenant la moyenne de la colonne
-        df_mean = df.groupby(["Année", "Prestataire", "Palier kilométrique"], as_index=False)[col_name].mean()
+        # Agréger par (Annee, Prestataire, Palier) en prenant la moyenne de la colonne
+        df_mean = df.groupby(["Annee", "Prestataire", "Palier kilometrique"], as_index=False)[col_name].mean()
         df_mean.rename(columns={col_name: "Moyenne"}, inplace=True)
         
         # Générer un line chart (avec marqueurs) avec Plotly Express
         fig = px.line(
             df_mean,
-            x="Palier kilométrique",
+            x="Palier kilometrique",
             y="Moyenne",
-            color="Année",
+            color="Annee",
             markers=True,
             facet_col="Prestataire",
-            category_orders={"Palier kilométrique": ordre_paliers}
+            category_orders={"Palier kilometrique": ordre_paliers}
         )
         fig.update_layout(
             title=dict(
@@ -115,9 +115,9 @@ def generate_line_chart(df, col_name):
                 font=dict(size=24, family="Arial", color="black")
             ),
             title_x=0.5,
-            xaxis_title="Palier kilométrique",
+            xaxis_title="Palier kilometrique",
             yaxis_title=f"Moyenne du {col_name}",
-            legend_title="Année",
+            legend_title="Annee",
             legend_title_font=dict(color="black", size=16),
             legend=dict(font=dict(color="black")),
             template="plotly_white",
@@ -184,9 +184,9 @@ st.markdown("<h1 class='title'>Dashboard Productivité - Centrale Danone</h1>", 
 uploaded_file = st.file_uploader("Uploader votre CSV d'origine (ex : donnees_unifiees_original.csv)", type=["csv"])
 if uploaded_file is not None:
     df_original = pd.read_csv(uploaded_file, encoding="utf-8-sig")
-    # Convertir 'Mois' et 'Année' en int
+    # Convertir 'Mois' et 'Annee' en int
     df_original["Mois"] = pd.to_numeric(df_original["Mois"], errors="coerce").fillna(0).astype(int)
-    df_original["Année"] = pd.to_numeric(df_original["Année"], errors="coerce").fillna(0).astype(int)
+    df_original["Annee"] = pd.to_numeric(df_original["Annee"], errors="coerce").fillna(0).astype(int)
     st.success("Fichier d'origine chargé avec succès.")
 else:
     st.info("Veuillez uploader votre fichier CSV d'origine.")
@@ -199,11 +199,11 @@ if "df_cum" not in st.session_state:
 # -----------------------------------------
 # FORMULAIRE de saisie (mise à jour) pour Cout et Valeur
 # -----------------------------------------
-st.subheader("Ajouter ou mettre à jour des valeurs pour (Année, Mois)")
+st.subheader("Ajouter ou mettre à jour des valeurs pour (Annee, Mois)")
 annee_defaut = datetime.datetime.now().year
 col_year, col_month = st.columns(2)
 with col_year:
-    annee = st.number_input("Année", min_value=2000, max_value=2100, value=annee_defaut, step=1)
+    annee = st.number_input("Annee", min_value=2000, max_value=2100, value=annee_defaut, step=1)
 with col_month:
     mois = st.selectbox("Mois", list(range(1, 13)))
 
@@ -254,8 +254,8 @@ with st.form("ajout_data"):
             nouvelles_lignes.append({
                 "Prestataire": prest,
                 "Mois": mois,
-                "Palier kilométrique": palier,
-                "Année": annee,
+                "Palier kilometrique": palier,
+                "Annee": annee,
                 "Cout": cout_str,
                 "Valeur": valeur_str
             })
@@ -263,14 +263,14 @@ with st.form("ajout_data"):
     if btn_submit and nouvelles_lignes:
         df_new = pd.DataFrame(nouvelles_lignes)
         df_new["Mois"] = df_new["Mois"].astype(int)
-        df_new["Année"] = df_new["Année"].astype(int)
+        df_new["Annee"] = df_new["Annee"].astype(int)
         df_cum = st.session_state.df_cum
         for idx, row in df_new.iterrows():
             mask = (
                 (df_cum["Prestataire"] == row["Prestataire"]) &
                 (df_cum["Mois"] == row["Mois"]) &
-                (df_cum["Palier kilométrique"] == row["Palier kilométrique"]) &
-                (df_cum["Année"] == row["Année"])
+                (df_cum["Palier kilometrique"] == row["Palier kilometrique"]) &
+                (df_cum["Annee"] == row["Annee"])
             )
             if mask.any():
                 df_cum.loc[mask, "Valeur"] = row["Valeur"]
