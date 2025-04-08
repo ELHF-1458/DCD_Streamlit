@@ -26,7 +26,7 @@ logging.debug("Début de l'exécution de l'application.")
 OUTPUT_CSV_PATH = r"C:\Users\lenovo\Downloads\Data_CD\donnees_unifiees_mis_a_jour.csv"
 LOGO_PATH = os.path.join(r"C:\Users\lenovo\Downloads\Data_CD", "Centrale-Danone-Logo.png")
 
-# Attendu dans le fichier d'entrée : 
+# Colonnes attendues dans le CSV d'entrée :
 # "Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
@@ -36,7 +36,7 @@ couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
 # Fonctions utilitaires
 # -----------------------------------------
 def load_data_from_uploaded(file) -> pd.DataFrame:
-    """Lit le CSV uploadé avec l'encodage 'utf-8-sig' et convertit 'Mois' et 'Annee' en int."""
+    """Lit le CSV uploadé (encodage utf-8-sig) et convertit 'Mois' et 'Annee' en int."""
     try:
         df = pd.read_csv(file, encoding="utf-8-sig")
         if not df.empty:
@@ -57,7 +57,7 @@ def save_data(df, csv_path):
         logging.error("Erreur lors de la sauvegarde des données : %s", e)
 
 def convert_valeur(x):
-    """Convertit une chaîne de type 'XX.XX%' en float."""
+    """Convertit une chaîne du type 'XX.XX%' en float (XX.XX)."""
     try:
         s = str(x)
         if "%" in s:
@@ -78,27 +78,31 @@ def convert_cout(x):
 
 def generate_line_chart(df, col_name):
     """
-    Génère un line chart de haute qualité pour la colonne spécifiée (col_name)
-    en utilisant la même structure que vos anciens histogrammes avec courbes de tendance.
-    Pour ce faire, on utilise px.histogram pour bénéficier du layout (facettes, axes, grilles),
-    on supprime ensuite les barres et on ajoute nos courbes lissées (spline).
+    Génère un line chart de haute qualité pour la colonne spécifiée (col_name) en utilisant
+    la logique suivante :
+      - On agrège les données par (Annee, Prestataire, Palier kilometrique) en prenant la moyenne.
+      - On crée une figure avec px.histogram pour bénéficier du layout (axes, grilles, facettes) 
+        puis on supprime les traces de barres.
+      - Ensuite, on ajoute des traces de courbes lissées (spline) via go.Scatter.
     """
     try:
-        # Conversion de la colonne ciblée
+        # Convertir la colonne ciblée
         if col_name == "Valeur":
             df[col_name] = df[col_name].apply(convert_valeur)
         elif col_name == "Cout":
             df[col_name] = df[col_name].apply(convert_cout)
-        # Définir le palier comme une catégorie ordonnée
+        
+        # Définir "Palier kilometrique" en catégorie ordonnée
         df["Palier kilometrique"] = pd.Categorical(
             df["Palier kilometrique"],
             categories=ordre_paliers,
             ordered=True
         )
-        # Agrégation des données : moyenne pour (Annee, Prestataire, Palier kilometrique)
+        # Agréger par (Annee, Prestataire, Palier kilometrique)
         df_mean = df.groupby(["Annee", "Prestataire", "Palier kilometrique"], as_index=False)[col_name].mean()
         df_mean.rename(columns={col_name: "Moyenne"}, inplace=True)
-        # Création de la figure via px.histogram pour obtenir la structure (facettes, axes, etc.)
+        
+        # Création du layout via px.histogram pour bénéficier des facettes, axes, etc.
         fig = px.histogram(
             df_mean,
             x="Palier kilometrique",
@@ -109,8 +113,9 @@ def generate_line_chart(df, col_name):
             category_orders={"Palier kilometrique": ordre_paliers},
             color_discrete_map=couleur_barres
         )
-        # Supprimer les barres pour ne garder que la structure de layout
+        # Supprimer les traces d'histogramme pour ne laisser que le layout
         fig.data = []
+        
         # Mise à jour du layout
         fig.update_layout(
             title=dict(
@@ -141,11 +146,10 @@ def generate_line_chart(df, col_name):
                 fig.layout[axis].gridwidth = 1
         fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].strip(),
                                                     font=dict(size=18, color="black")))
-        # Ajout des courbes de tendance lissées par (Annee, Prestataire)
+        # Ajout des courbes de tendance lissées
         mapping = {cat: i for i, cat in enumerate(ordre_paliers)}
         prestataires = list(df_mean["Prestataire"].unique())
         annees = sorted(df_mean["Annee"].unique())
-        # Remplacer éventuellement le dictionnaire de couleurs si besoin :
         color_map = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
         for i, prest in enumerate(prestataires):
             xaxis_name = "x" if i == 0 else f"x{i+1}"
@@ -159,12 +163,7 @@ def generate_line_chart(df, col_name):
                     x=df_sub["Palier kilometrique"].tolist(),
                     y=df_sub["Moyenne"].values,
                     mode="lines",
-                    line=dict(
-                        color=color_map.get(annee, "#000000"),
-                        dash="dash",
-                        shape="spline",
-                        width=3
-                    ),
+                    line=dict(color=color_map.get(annee, "#000000"), dash="dash", shape="spline", width=3),
                     name=f"Tendance {annee}",
                     legendgroup=str(annee),
                     showlegend=False
@@ -258,9 +257,9 @@ with st.form("ajout_data"):
                 value="20.00",
                 key=f"{prest}_{palier}_valeur"
             ).strip()
-            # Si l'un des champs est vide (ce qui ne devrait pas se produire car pré-remplis), erreur
+            # Vérifier que si un champ est modifié, l'autre est rempli (ils ne devraient jamais être vides grâce au pré-remplissage)
             if (cout_input == "" and valeur_input != "") or (cout_input != "" and valeur_input == ""):
-                st.error(f"Erreur: Pour {prest} - {palier}, veuillez remplir à la fois 'Cout' et 'Valeur' ou laisser les deux vides.")
+                st.error(f"Erreur: Pour {prest} - {palier}, remplissez à la fois 'Cout' et 'Valeur' ou laissez-les toutes les deux vides.")
                 st.stop()
             try:
                 cout_num = float(cout_input)
@@ -278,7 +277,7 @@ with st.form("ajout_data"):
                 "Cout": f"{cout_num:.2f}",
                 "Valeur": f"{valeur_num:.2f}%"
             })
-        # Validation que pour ce prestataire la somme est exactement 100.00 pour Cout et Valeur
+        # Validation des sommes par prestataire
         if prest_lignes:
             if abs(sum_valeur - 100.00) > 1e-2:
                 st.error(f"Erreur: La somme des 'Valeur' pour {prest} est {sum_valeur:.2f} et doit être exactement 100.00.")
@@ -321,18 +320,20 @@ st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifi
 # Génération et affichage des graphiques (Line Charts)
 # -----------------------------------------
 if "data_updated" in st.session_state and st.session_state.data_updated:
+    # Graphique pour Valeur
     st.subheader("Graphique pour la Valeur")
     fig_val = generate_line_chart(st.session_state.df_cum.copy(), "Valeur")
     if fig_val is not None:
-        st.plotly_chart(fig_val)
+        st.plotly_chart(fig_val, use_container_width=True)
         png_val = fig_to_png_bytes(fig_val)
         if png_val:
             st.download_button("Télécharger le graphique Valeur en PNG", data=png_val,
                                file_name="graphique_valeur.png", mime="image/png")
+    # Graphique pour Cout
     st.subheader("Graphique pour le Cout")
     fig_cout = generate_line_chart(st.session_state.df_cum.copy(), "Cout")
     if fig_cout is not None:
-        st.plotly_chart(fig_cout)
+        st.plotly_chart(fig_cout, use_container_width=True)
         png_cout = fig_to_png_bytes(fig_cout)
         if png_cout:
             st.download_button("Télécharger le graphique Cout en PNG", data=png_cout,
