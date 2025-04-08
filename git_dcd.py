@@ -144,6 +144,7 @@ def generate_graph(df, col_name):
             paper_bgcolor="white",
             plot_bgcolor="white"
         )
+        fig.update_xaxes(tickangle=45)
         for axis in fig.layout:
             if axis.startswith("xaxis"):
                 fig.layout[axis].title.font = dict(color="black", size=16)
