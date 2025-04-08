@@ -26,8 +26,7 @@ logging.debug("Début de l'exécution de l'application.")
 OUTPUT_CSV_PATH = r"C:\Users\lenovo\Downloads\Data_CD\donnees_unifiees_mis_a_jour.csv"
 LOGO_PATH = os.path.join(r"C:\Users\lenovo\Downloads\Data_CD", "Centrale-Danone-Logo.png")
 
-# Les colonnes attendues dans le fichier d'entrée sont :
-# "Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"
+# Colonnes attendues : "Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"
 ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
 couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
@@ -49,7 +48,7 @@ def load_data_from_uploaded(file) -> pd.DataFrame:
         return pd.DataFrame(columns=["Prestataire", "Mois", "Palier kilometrique", "Annee", "Cout", "Valeur"])
 
 def save_data(df, csv_path):
-    """Sauvegarde le DataFrame dans un CSV avec encodage utf-8-sig."""
+    """Sauvegarde le DataFrame dans un CSV (utf-8-sig)."""
     try:
         df.to_csv(csv_path, index=False, encoding="utf-8-sig")
         logging.debug("Données sauvegardées dans %s", csv_path)
@@ -78,9 +77,8 @@ def convert_cout(x):
 
 def generate_line_chart(df, col_name):
     """
-    Génère un line chart à partir du DataFrame pour la colonne spécifiée (col_name),
-    en regroupant par (Annee, Prestataire, Palier kilometrique) avec la moyenne.
-    Les facettes sont les Prestataires et les courbes sont colorées par Annee.
+    Génère un line chart pour la colonne spécifiée (col_name) en agrégeant par (Annee, Prestataire, Palier kilometrique).
+    Le graphique présente des courbes lissées (spline) avec des marqueurs et une épaisseur de ligne améliorée.
     """
     try:
         if col_name == "Valeur":
@@ -96,6 +94,7 @@ def generate_line_chart(df, col_name):
         df_mean = df.groupby(["Annee", "Prestataire", "Palier kilometrique"], as_index=False)[col_name].mean()
         df_mean.rename(columns={col_name: "Moyenne"}, inplace=True)
         
+        # Utilisation d'une ligne spline avec marqueurs, taille des marqueurs et largeur de ligne ajustées pour une meilleure qualité
         fig = px.line(
             df_mean,
             x="Palier kilometrique",
@@ -103,8 +102,11 @@ def generate_line_chart(df, col_name):
             color="Annee",
             markers=True,
             facet_col="Prestataire",
-            category_orders={"Palier kilometrique": ordre_paliers}
+            category_orders={"Palier kilometrique": ordre_paliers},
+            line_shape="spline"
         )
+        # Ajustement des styles
+        fig.update_traces(marker=dict(size=10), line=dict(width=3))
         fig.update_layout(
             title=dict(
                 text=f"<b>Évolution et Dispersion du {col_name} par Palier et Prestataire par an</b>",
@@ -131,7 +133,7 @@ def generate_line_chart(df, col_name):
                 fig.layout[axis].tickfont = dict(color="black")
                 fig.layout[axis].gridcolor = "lightgrey"
                 fig.layout[axis].gridwidth = 1
-        fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].strip(), 
+        fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].strip(),
                                                     font=dict(size=18, color="black")))
         return fig
     except Exception as e:
@@ -176,7 +178,7 @@ st.markdown("<h1 class='title'>Dashboard Productivité - Centrale Danone</h1>", 
 # -----------------------------------------
 # UPLOAD du fichier d'entrée
 # -----------------------------------------
-uploaded_file = st.file_uploader("Uploader votre CSV d'origine (ex : donnees_unifiees_original.csv)", type=["csv"])
+uploaded_file = st.file_uploader("Uploader votre CSV d'origine (ex: donnees_unifiees_original.csv)", type=["csv"])
 if uploaded_file is not None:
     df_original = pd.read_csv(uploaded_file, encoding="utf-8-sig")
     df_original["Mois"] = pd.to_numeric(df_original["Mois"], errors="coerce").fillna(0).astype(int)
@@ -205,12 +207,11 @@ nouvelles_lignes = []
 with st.form("ajout_data"):
     for prest in prestataires_list:
         st.markdown(f"### {prest}")
-        # Initialiser des sommes pour validation
         sum_valeur = 0.0
         sum_cout = 0.0
-        prest_lignes = []  # stocker lignes pour ce prestataire
+        prest_lignes = []
         for palier in ordre_paliers:
-            # Champs pré-remplis pour Cout et Valeur avec "20.00"
+            # Les champs sont pré-remplis avec "20.00"
             cout_input = st.text_input(
                 f"{prest} - {palier} (Cout)",
                 value="20.00",
@@ -221,20 +222,19 @@ with st.form("ajout_data"):
                 value="20.00",
                 key=f"{prest}_{palier}_valeur"
             ).strip()
-            # Si l'utilisateur modifie, les deux champs doivent être renseignés
+            # Si les deux champs sont vides (ce qui ne devrait pas arriver car ils sont pré-remplis)
+            if cout_input == "" and valeur_input == "":
+                continue
+            # Vérifier que si un champ est rempli, l'autre l'est aussi
             if (cout_input == "" and valeur_input != "") or (cout_input != "" and valeur_input == ""):
                 st.error(f"Erreur: Pour {prest} - {palier}, vous devez remplir à la fois 'Cout' et 'Valeur' ou laisser les deux vides.")
                 st.stop()
-            # Si les deux champs sont vides, cela signifie aucune mise à jour pour ce palier
-            if cout_input == "" and valeur_input == "":
-                continue
             try:
                 cout_num = float(cout_input)
                 valeur_num = float(valeur_input)
             except ValueError:
                 st.error(f"Erreur de conversion pour {prest} - {palier}.")
                 st.stop()
-            # Accumuler les sommes pour validation
             sum_cout += cout_num
             sum_valeur += valeur_num
             prest_lignes.append({
@@ -245,7 +245,7 @@ with st.form("ajout_data"):
                 "Cout": f"{cout_num:.2f}",
                 "Valeur": f"{valeur_num:.2f}%"
             })
-        # Vérifier que la somme pour ce prestataire est exactement 100.00 (si des valeurs ont été saisies)
+        # Vérifier que la somme des valeurs est exactement 100.00 pour ce prestataire
         if prest_lignes:
             if abs(sum_valeur - 100.00) > 1e-2:
                 st.error(f"Erreur: La somme des 'Valeur' pour {prest} est {sum_valeur:.2f} et doit être exactement 100.00.")
@@ -285,25 +285,31 @@ csv_bytes = df_final.to_csv(index=False, encoding="utf-8-sig").encode("utf-8")
 st.download_button("Télécharger CSV", data=csv_bytes, file_name="donnees_unifiees_mis_a_jour.csv", mime="text/csv")
 
 # -----------------------------------------
-# Génération des graphiques (Line Charts) pour Valeur et Cout
+# Génération des graphiques (Line Charts)
 # -----------------------------------------
 if "data_updated" in st.session_state and st.session_state.data_updated:
+    # Graphique pour Valeur
     st.subheader("Graphique pour la Valeur")
     fig_val = generate_line_chart(st.session_state.df_cum.copy(), "Valeur")
     if fig_val is not None:
         st.plotly_chart(fig_val)
         png_val = fig_to_png_bytes(fig_val)
         if png_val:
-            st.download_button("Télécharger le graphique Valeur en PNG", data=png_val,
-                               file_name="graphique_valeur.png", mime="image/png")
+            st.download_button("Télécharger le graphique Valeur en PNG",
+                               data=png_val,
+                               file_name="graphique_valeur.png",
+                               mime="image/png")
+    # Graphique pour Cout
     st.subheader("Graphique pour le Cout")
     fig_cout = generate_line_chart(st.session_state.df_cum.copy(), "Cout")
     if fig_cout is not None:
         st.plotly_chart(fig_cout)
         png_cout = fig_to_png_bytes(fig_cout)
         if png_cout:
-            st.download_button("Télécharger le graphique Cout en PNG", data=png_cout,
-                               file_name="graphique_cout.png", mime="image/png")
+            st.download_button("Télécharger le graphique Cout en PNG",
+                               data=png_cout,
+                               file_name="graphique_cout.png",
+                               mime="image/png")
     st.session_state.data_updated = False
 
 logging.debug("Fin de l'exécution de l'application.")
