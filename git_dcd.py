@@ -24,7 +24,7 @@ logging.debug("Début de l'exécution de l'application.")
 # -----------------------------------------
 OUTPUT_CSV_PATH = "donnees_unifiees_mis_a_jour.csv"  # Fichier de sortie
 LOGO_PATH = "Centrale-Danone-Logo.png"  # Logo (doit être dans le même répertoire)
-ordre_paliers = ["[0 - 4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
+ordre_paliers = ["[0 - 4000]", "[4000-8000]", "[8000-11000]", "[11000-14000]", ">14000"]
 # Note : On s'assure ici d'avoir la bonne orthographe sans espaces superflus.
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
 couleur_barres = {2023: "#0f1e5f", 2024: "#e81123", 2025: "#275c20"}
@@ -182,7 +182,7 @@ def generate_graph(df, col_name):
                     mode="lines",  # Affichage sous forme de ligne
                     line=dict(
                         color=couleur_barres.get(annee, "#000000"),
-                        dash="dash",         # Ligne continue (pas en tirets)
+                        dash="solid",         # Ligne continue (pas en tirets)
                         shape="spline",         # Ligne droite (pas de courbe spline)
                         width=3
                     ),
