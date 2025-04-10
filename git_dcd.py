@@ -249,7 +249,7 @@ if uploaded_file is not None:
     st.success("Fichier d'origine chargé avec succès.")
     st.write(df_original["Cout"].shape[0])
     st.write(df_original["Valeur"].shape[0])
-    st.write(df_original["Palier kilometrique"].shape[0])
+    st.write(df_original["Palier kilometrique"].unique())
 
 
 else:
