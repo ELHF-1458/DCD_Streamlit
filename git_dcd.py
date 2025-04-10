@@ -273,12 +273,12 @@ with st.form("ajout_data"):
         for palier in ordre_paliers:
             cout_input = st.text_input(
                 f"{prest} - {palier} (Cout)",
-                value="20.00",
+                value="00.00",
                 key=f"{prest}_{palier}_cout"
             ).strip()
             valeur_input = st.text_input(
                 f"{prest} - {palier} (Valeur)",
-                value="20.00",
+                value="00.00",
                 key=f"{prest}_{palier}_valeur"
             ).strip()
             # Vérification qu'un champ n'est pas rempli sans l'autre
