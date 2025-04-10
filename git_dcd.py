@@ -248,8 +248,8 @@ if uploaded_file is not None:
     df_original = load_data_from_uploaded(uploaded_file)
     st.success("Fichier d'origine chargé avec succès.")
     st.write(df_original["Cout"].shape[0])
-
     st.write(df_original["Valeur"].shape[0])
+    st.write(df_original["Palier kilometrique"].shape[0])
 
 
 else:
