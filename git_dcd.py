@@ -86,7 +86,9 @@ def convert_cout(x):
 def generate_graph(df, col_name):
     """
     Génère le graphique à partir du DataFrame cumulé sans double-normalisation
-    pour la colonne indiquée ("Valeur" ou "Cout").
+    pour la colonne indiquée ("Valeur" ou "Cout"), en masquant les barres et en
+    affichant les courbes de tendance sous forme de lignes simples, avec la légende
+    des années affichée.
     """
     try:
         # Conversion de la colonne selon son type
@@ -95,23 +97,22 @@ def generate_graph(df, col_name):
         elif col_name == "Cout":
             df[col_name] = df[col_name].apply(convert_cout)
         
-        # On s'assure de nettoyer la colonne "Prestataire" si nécessaire (bien que celle-ci devrait être homogène)
+        # Normalisation des colonnes (supprimer espaces superflus, majuscules pour cohérence)
         df["Prestataire"] = df["Prestataire"].astype(str).str.strip().str.upper()
-        # On normalise également "Palier kilometrique"
         df["Palier kilometrique"] = pd.Categorical(
             df["Palier kilometrique"].astype(str).str.strip().str.upper(),
             categories=ordre_paliers,
             ordered=True
         )
         
-        # Agrégation par (Annee, Prestataire, Palier kilometrique) en calculant la moyenne
+        # Agrégation des valeurs par (Annee, Prestataire, Palier kilometrique) en calculant la moyenne
         df_mean = df.groupby(["Annee", "Prestataire", "Palier kilometrique"], as_index=False)[col_name].mean()
         
-        # Renommer la colonne agrégée
+        # Renommer la colonne agrégée pour la suite
         new_col = f"{col_name} Normalisé"
         df_mean.rename(columns={col_name: new_col}, inplace=True)
         
-        # Création de l'histogramme avec Plotly Express
+        # Création de l'histogramme (qui génère initialement des traces de type bar)
         fig = px.histogram(
             df_mean,
             x="Palier kilometrique",
@@ -122,6 +123,11 @@ def generate_graph(df, col_name):
             category_orders={"Palier kilometrique": ordre_paliers},
             color_discrete_map=couleur_barres
         )
+        
+        # Masquer les barres de l'histogramme
+        fig.data = []
+        
+        # Mise à jour de la mise en page
         fig.update_layout(
             title=dict(
                 text=f"<b>Évolution et Dispersion de {col_name} par Palier et Prestataire par an</b>",
@@ -154,9 +160,10 @@ def generate_graph(df, col_name):
             font=dict(size=18, color="black"))
         )
         
-        # Ajout des courbes de tendance lissées pour chaque groupe (Prestataire, Annee)
+        # Ajout des courbes de tendance sous forme de lignes (pas de spline) pour chaque groupe (Prestataire, Année)
         prestataires = df_mean["Prestataire"].unique()
         annees = sorted(df_mean["Annee"].unique())
+        already_plotted = set()  # Pour gérer la légende par année
         for i, prest in enumerate(prestataires):
             xaxis_name = "x" if i == 0 else f"x{i+1}"
             yaxis_name = "y" if i == 0 else f"y{i+1}"
@@ -165,18 +172,23 @@ def generate_graph(df, col_name):
                 if df_sub.empty or df_sub.shape[0] < 2:
                     continue
                 df_sub = df_sub.sort_values("Palier kilometrique")
+                # Affichage de la légende seulement pour la première trace de l'année
+                showlegend = (annee not in already_plotted)
+                if showlegend:
+                    already_plotted.add(annee)
                 trace_trend = go.Scatter(
                     x=df_sub["Palier kilometrique"].tolist(),
                     y=df_sub[new_col].values,
-                    mode="lines",
+                    mode="lines",  # Affichage sous forme de ligne
                     line=dict(
                         color=couleur_barres.get(annee, "#000000"),
-                        dash="dash",
-                        shape="spline"
+                        dash="solid",         # Ligne continue (pas en tirets)
+                        shape="linear",         # Ligne droite (pas de courbe spline)
+                        width=3
                     ),
                     name=f"Tendance {annee}",
                     legendgroup=str(annee),
-                    showlegend=False
+                    showlegend=showlegend
                 )
                 trace_trend.update(xaxis=xaxis_name, yaxis=yaxis_name)
                 fig.add_trace(trace_trend)
