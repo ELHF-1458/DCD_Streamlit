@@ -27,7 +27,7 @@ LOGO_PATH = "Centrale-Danone-Logo.png"  # Logo (doit être dans le même répert
 ordre_paliers = ["[0 - 4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 # Note : On s'assure ici d'avoir la bonne orthographe sans espaces superflus.
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
-couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
+couleur_barres = {2023: "#0f1e5f", 2024: "#e81123", 2025: "#275c20"}
 
 # -----------------------------------------
 # Fonctions utilitaires
@@ -182,8 +182,8 @@ def generate_graph(df, col_name):
                     mode="lines",  # Affichage sous forme de ligne
                     line=dict(
                         color=couleur_barres.get(annee, "#000000"),
-                        dash="solid",         # Ligne continue (pas en tirets)
-                        shape="linear",         # Ligne droite (pas de courbe spline)
+                        dash="dash",         # Ligne continue (pas en tirets)
+                        shape="spline",         # Ligne droite (pas de courbe spline)
                         width=3
                     ),
                     name=f"Tendance {annee}",
