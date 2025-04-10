@@ -24,7 +24,7 @@ logging.debug("Début de l'exécution de l'application.")
 # -----------------------------------------
 OUTPUT_CSV_PATH = "donnees_unifiees_mis_a_jour.csv"  # Fichier de sortie
 LOGO_PATH = "Centrale-Danone-Logo.png"  # Logo (doit être dans le même répertoire)
-ordre_paliers = ["[0-4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
+ordre_paliers = ["[0 - 4000]", "[4000-8000]", "[8000-11000]", "[11011-14000]", ">14000"]
 # Note : On s'assure ici d'avoir la bonne orthographe sans espaces superflus.
 prestataires_list = ["COMPTOIR SERVICE", "S.T INDUSTRIE", "SDTM", "TRANSMEL SARL"]
 couleur_barres = {2023: "#636EFA", 2024: "#EF553B", 2025: "#00B050"}
